@@ -16,6 +16,7 @@ import scissorsA from './assets/b_scissors_a.png';
 import slotJpg from './assets/b_slot.jpg';
 import slotA from './assets/b_slot_a.png';
 import trayJpg from './assets/tray.jpg';
+import bgPlayJpg from './assets/bg_play.jpg';
 import trayA from './assets/tray_a.png';
 import popSettingsJpg from './assets/pop_settings.jpg';
 import popSettingsA from './assets/pop_settings_a.png';
@@ -2060,60 +2061,28 @@ function drawBanner(): void {
 
 const bgCanvas = document.getElementById('bg') as HTMLCanvasElement | null;
 let bgKey = '';
+const bgImg = new Image();
+bgImg.onload = () => { bgKey = ''; };
+bgImg.src = bgPlayJpg;
 /**
- * The soft sky backdrop with blurred toy-workshop props round the edges (rounded blocks, a toolbox, a
- * wrench, a coil of rope), kept pale so the board stays the focus. Redrawn only when the size changes.
+ * The gameplay backdrop: the reference picture (a cosy knitting room with a blue crochet rug), drawn to
+ * cover the screen — centred, cropped at the sides or bottom. Redrawn only when the size changes.
  */
 function drawBackground(): void {
   if (!bgCanvas) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1), W = bgCanvas.clientWidth, H = bgCanvas.clientHeight;
-  const key = `${W}x${H}@${dpr}`;
+  const key = `${W}x${H}@${dpr}:${bgImg.complete && bgImg.naturalWidth > 0}`;
   if (key === bgKey || W < 1 || H < 1) return;
   bgKey = key;
   bgCanvas.width = Math.round(W * dpr); bgCanvas.height = Math.round(H * dpr);
   const g = bgCanvas.getContext('2d')!;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const sky = g.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#c7edff'); sky.addColorStop(0.5, '#a9dfff'); sky.addColorStop(1, '#8ccbf3');
-  g.fillStyle = sky;
+  g.fillStyle = '#7fb4ec';
   g.fillRect(0, 0, W, H);
-  // a pale floor glow behind the play area
-  const glow = g.createRadialGradient(W / 2, H * 0.55, 0, W / 2, H * 0.55, Math.max(W, H) * 0.55);
-  glow.addColorStop(0, 'rgba(235,248,255,0.65)'); glow.addColorStop(1, 'rgba(235,248,255,0)');
-  g.fillStyle = glow;
-  g.fillRect(0, 0, W, H);
-  const colW = Math.min(W, H * 0.497), cx = W / 2, s = colW / 100;   // props are placed in a 100-wide column
-  const X = (u: number) => cx + (u - 50) * s, Y = (v: number) => H * v;
-  const block = (x: number, y: number, w: number, h: number, d: number, top: string, front: string, r = 0.18) => {
-    g.fillStyle = front;
-    roundRect(g, x, y + d * 0.35, w, h, Math.min(w, h) * r); g.fill();
-    g.fillStyle = top;
-    roundRect(g, x, y, w, h * 0.72, Math.min(w, h) * r); g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.35)';
-    roundRect(g, x + w * 0.08, y + h * 0.06, w * 0.84, h * 0.12, h * 0.06); g.fill();
-  };
-  g.save();
-  g.filter = `blur(${Math.max(1.5, s * 0.5)}px)`;
-  g.globalAlpha = 0.85;
-  // left side: lavender rocks, an orange toolbox with a wrench
-  block(X(-30), Y(0.12), 40 * s, 22 * s, 8 * s, '#d9d4f2', '#b8b1df');
-  block(X(-22), Y(0.15), 30 * s, 14 * s, 6 * s, '#ffc75a', '#f08a2a');
-  g.strokeStyle = '#7d8aa8'; g.lineWidth = 3 * s; g.lineCap = 'round';
-  g.beginPath(); g.moveTo(X(-16), Y(0.162)); g.lineTo(X(-2), Y(0.155)); g.stroke();
-  block(X(-34), Y(0.24), 44 * s, 18 * s, 7 * s, '#e3e0f6', '#c4bfe6');
-  block(X(-30), Y(0.33), 26 * s, 14 * s, 6 * s, '#d4cff0', '#b4acdc');
-  // right side: a blue machine, an orange crate, a coil of yellow rope
-  block(X(78), Y(0.09), 40 * s, 16 * s, 7 * s, '#ffc75a', '#f08a2a');
-  block(X(82), Y(0.17), 34 * s, 26 * s, 8 * s, '#9fc2f2', '#6f97d8');
-  g.strokeStyle = '#f2b830'; g.lineWidth = 4 * s;
-  for (let k = 0; k < 4; k++) { g.beginPath(); g.ellipse(X(92), Y(0.22) + k * 3.2 * s, 5 * s, 2.4 * s, 0, 0, Math.PI * 2); g.stroke(); }
-  block(X(76), Y(0.3), 40 * s, 18 * s, 7 * s, '#e3e0f6', '#c4bfe6');
-  // bottom corners
-  block(X(-30), Y(0.84), 34 * s, 20 * s, 7 * s, '#9fc2f2', '#6f97d8');
-  block(X(-26), Y(0.93), 30 * s, 16 * s, 6 * s, '#ffc75a', '#f08a2a');
-  block(X(92), Y(0.8), 30 * s, 18 * s, 7 * s, '#ffc75a', '#f08a2a');
-  block(X(88), Y(0.9), 36 * s, 18 * s, 7 * s, '#9fc2f2', '#6f97d8');
-  g.restore();
+  if (!bgImg.complete || !bgImg.naturalWidth) return;
+  const k = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight);
+  const w = bgImg.naturalWidth * k, h = bgImg.naturalHeight * k;
+  g.drawImage(bgImg, (W - w) / 2, Math.min(0, (H - h) * 0.35), w, h);
 }
 
 function draw(): void {
