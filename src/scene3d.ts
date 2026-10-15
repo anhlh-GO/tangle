@@ -72,8 +72,8 @@ function woodTexture(): THREE.CanvasTexture {
   c.width = 512; c.height = 512;
   const g = c.getContext('2d')!;
   const base = g.createLinearGradient(0, 0, 512, 512);
-  base.addColorStop(0, '#f7b05a');
-  base.addColorStop(1, '#f2a54d');
+  base.addColorStop(0, '#f7c37d');
+  base.addColorStop(1, '#f2b86c');
   g.fillStyle = base;
   g.fillRect(0, 0, 512, 512);
   let seed = 7;
@@ -164,8 +164,10 @@ function woolMaterial(color: THREE.Color, rep = 3, raw = false): THREE.MeshPhysi
   const map = fiberTexture().clone();
   map.needsUpdate = true;
   map.repeat.set(rep, 1);
-  const c = raw ? color.clone() : ropeColor(color);
-  return new THREE.MeshPhysicalMaterial({ color: c, map, vertexColors: true, roughness: 0.9, metalness: 0, sheen: 1, sheenRoughness: 0.55, sheenColor: c.clone().lerp(new THREE.Color(0xffffff), 0.55) });
+  // raw (the basket picture): the strand's own colour, a touch richer, with only a faint sheen so it stays deep
+  let c = ropeColor(color);
+  if (raw) { const h = { h: 0, s: 0, l: 0 }; color.getHSL(h); c = new THREE.Color().setHSL(h.h, Math.min(1, h.s * 1.15), h.l); }
+  return new THREE.MeshPhysicalMaterial({ color: c, map, vertexColors: true, roughness: 0.85, metalness: 0, sheen: raw ? 0.6 : 1, sheenRoughness: 0.6, sheenColor: c.clone().lerp(new THREE.Color(0xffffff), raw ? 0.2 : 0.55) });
 }
 /** A ball of wool: a soft core wound round with many thin strands every which way, and a loose end. */
 export function ropeBall(color: THREE.Color, r = 0.3, raw = false): THREE.Group {
@@ -488,18 +490,38 @@ export class Scene3D {
     const step = Math.min(STEP, 0.75 / top);
     const pegH = Math.max(0.78, 0.25 + top * step + 0.2);
     this.pegH = pegH;
-    // as in the reference: a honey-orange top slab with a soft bevelled edge, set in a thick
-    // rounded brown rim whose front edge shows below
+    // as in the reference: a light maple panel sunk inside a raised, mitred frame of darker wood
+    // (bevelled bars, a dark groove where they meet the panel), on a thick base whose front shows
     const tex = woodTexture();
-    const rimMat = new THREE.MeshStandardMaterial({ color: 0xa65a25, roughness: 0.55 });
-    const base = new THREE.Mesh(new RoundedBoxGeometry(W + 0.55, 0.42, D + 0.55, 5, 0.2), rimMat);
-    base.position.y = -0.23;
+    const FW = 0.5, FH = 0.2;                       // frame bar width / height above the panel
+    const OW = W + 0.2 + FW * 2, OD = D + 0.2 + FW * 2;
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x7a3610, roughness: 0.6 });
+    const base = new THREE.Mesh(new RoundedBoxGeometry(OW + 0.04, 0.4, OD + 0.04, 4, 0.12), baseMat);
+    base.position.y = -0.24;
     base.receiveShadow = true;
-    const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.6 });
-    const slab = new THREE.Mesh(new RoundedBoxGeometry(W + 0.12, 0.1, D + 0.12, 4, 0.045), topMat);
-    slab.position.y = -0.05;
-    slab.receiveShadow = true;
-    this.board.add(base, slab);
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.62 });
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(W + 0.24, 0.08, D + 0.24), topMat);
+    panel.position.y = -0.04;
+    panel.receiveShadow = true;
+    const groove = new THREE.Mesh(new THREE.BoxGeometry(W + 0.3, 0.06, D + 0.3), new THREE.MeshStandardMaterial({ color: 0x5a2508, roughness: 0.8 }));
+    groove.position.y = -0.055;
+    this.board.add(base, groove, panel);
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xb35a22, roughness: 0.5 });
+    const bevelMat = new THREE.MeshStandardMaterial({ color: 0xcf7a3a, roughness: 0.45 });
+    for (const [w, d, x, z] of [
+      [OW, FW, 0, -(OD - FW) / 2], [OW, FW, 0, (OD - FW) / 2],
+      [FW, OD - FW * 2 + 0.02, -(OW - FW) / 2, 0], [FW, OD - FW * 2 + 0.02, (OW - FW) / 2, 0],
+    ] as const) {
+      const bar = new THREE.Mesh(new RoundedBoxGeometry(w, FH + 0.08, d, 4, 0.07), frameMat);
+      bar.position.set(x, FH / 2 - 0.04, z);
+      bar.castShadow = true;
+      bar.receiveShadow = true;
+      // a lighter bevel strip along the top inner edge of each bar
+      const lip = new THREE.Mesh(new RoundedBoxGeometry(w > d ? w - FW * 1.2 : FW * 0.35, 0.03, w > d ? FW * 0.35 : d - FW * 0.2, 2, 0.012), bevelMat);
+      const inward = w > d ? -Math.sign(z) * FW * 0.28 : 0, inwardX = w > d ? 0 : -Math.sign(x) * FW * 0.28;
+      lip.position.set(x + inwardX, FH + 0.02, z + inward);
+      this.board.add(bar, lip);
+    }
     // cream pegs: a slim stem with a round knob, standing in a dark carved hole
     const pegMat = new THREE.MeshStandardMaterial({ color: 0xf3e4c8, roughness: 0.4 });
     const headMat = new THREE.MeshStandardMaterial({ color: 0xf8ecd6, roughness: 0.32 });
@@ -635,8 +657,9 @@ export class Scene3D {
     }
     // what must be on screen: the board's rim and the tops of the far pegs
     this.fit = [];
-    for (const x of [-W / 2 - 0.28, W / 2 + 0.28]) {
-      this.fit.push(new THREE.Vector3(x, 0, -D / 2 - 0.28), new THREE.Vector3(x, -0.44, D / 2 + 0.28));
+    const fo = 0.1 + 0.5 + 0.02;
+    for (const x of [-W / 2 - fo, W / 2 + fo]) {
+      this.fit.push(new THREE.Vector3(x, 0.12, -D / 2 - fo), new THREE.Vector3(x, -0.44, D / 2 + fo));
     }
     for (const p of [0, cols - 1]) this.fit.push(this.pegPos(p, pegH + 0.32));
     this.target.set(0, 0, 0);
