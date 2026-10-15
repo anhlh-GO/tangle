@@ -72,8 +72,8 @@ function woodTexture(): THREE.CanvasTexture {
   c.width = 512; c.height = 512;
   const g = c.getContext('2d')!;
   const base = g.createLinearGradient(0, 0, 512, 512);
-  base.addColorStop(0, '#f1be82');
-  base.addColorStop(1, '#ecb478');
+  base.addColorStop(0, '#fcba62');
+  base.addColorStop(1, '#f6ae56');
   g.fillStyle = base;
   g.fillRect(0, 0, 512, 512);
   let seed = 7;
@@ -203,7 +203,7 @@ const COIL = 0.42;   // a pulled rope winds itself up into a ball
 export class Scene3D {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(18, 1, 0.1, 400);
+  camera = new THREE.PerspectiveCamera(20, 1, 0.1, 400);
   private board = new THREE.Group();
   private strands: StrandView[] = [];
   private balls = new Map<string, HTMLCanvasElement>();
@@ -483,73 +483,42 @@ export class Scene3D {
     this.chains = [];
     this.lockFx = null;
     Object.assign(this.zoom, { cur: 1, to: 1, px: 0, pz: 0, tx: 0, tz: 0 });
-    const W = (cols - 1) * SP + 1.3, D = (rows - 1) * SP + 1.3;
+    // the panel reaches about half a peg-gap past the outer pegs, as in the reference
+    const W = (cols - 1) * SP + 1.06, D = (rows - 1) * SP + 1.06;
     this.zoom.w = W; this.zoom.d = D;
     const top = Math.max(1, ...depth);
     // many layers: squeeze them so the pegs stay short, as in the reference
     const step = Math.min(STEP, 0.75 / top);
-    const pegH = Math.max(0.78, 0.25 + top * step + 0.2);
+    const pegH = Math.max(1.12, 0.25 + top * step + 0.3);   // tall pegs, as in the reference
     this.pegH = pegH;
-    // as in the reference: a pale maple panel sunk in a one-piece, round-cornered frame of reddish wood
-    // (soft rounded top, a dark groove round the panel, a light lip on the panel's edge), thick base below
+    // as in the reference: a bright honey-maple panel with a soft light edge, sitting on a thin
+    // round-cornered frame of darker wood whose front edge shows, on a darker foot
     const tex = woodTexture();
-    const FW = 0.5, FH = 0.2;                         // frame width / how far it rises above the panel
-    const PW = W + 0.26, PD = D + 0.26;               // the panel
-    const OW = PW + FW * 2, OD = PD + FW * 2;
-    const rr = (w: number, d: number, r: number) => {
-      const sh = new THREE.Shape();
-      sh.moveTo(-w / 2 + r, -d / 2);
-      sh.lineTo(w / 2 - r, -d / 2); sh.quadraticCurveTo(w / 2, -d / 2, w / 2, -d / 2 + r);
-      sh.lineTo(w / 2, d / 2 - r); sh.quadraticCurveTo(w / 2, d / 2, w / 2 - r, d / 2);
-      sh.lineTo(-w / 2 + r, d / 2); sh.quadraticCurveTo(-w / 2, d / 2, -w / 2, d / 2 - r);
-      sh.lineTo(-w / 2, -d / 2 + r); sh.quadraticCurveTo(-w / 2, -d / 2, -w / 2 + r, -d / 2);
-      return sh;
-    };
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xc4693a, roughness: 0.38 });
-    const sideMat = new THREE.MeshStandardMaterial({ color: 0x652a0d, roughness: 0.55 });
-    // the frame: a rounded ring, bevelled so its top is soft
-    const ring = rr(OW - 0.12, OD - 0.12, 0.5);
-    ring.holes.push(rr(PW + 0.02, PD + 0.02, 0.2) as unknown as THREE.Path);
-    const frameGeo = new THREE.ExtrudeGeometry(ring, { depth: FH + 0.3, bevelEnabled: true, bevelThickness: 0.07, bevelSize: 0.06, bevelSegments: 4, curveSegments: 18 });
-    const frame = new THREE.Mesh(frameGeo, frameMat);
-    frame.rotation.x = -Math.PI / 2;
-    frame.position.y = -0.3 - 0.07 + 0.0;
+    const FR = 0.2;                                   // frame margin round the panel
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xbe6c2e, roughness: 0.45 });
+    const frame = new THREE.Mesh(new RoundedBoxGeometry(W + FR * 2, 0.3, D + FR * 2, 5, 0.13), frameMat);
+    frame.position.y = -0.17;
     frame.castShadow = true;
     frame.receiveShadow = true;
-    // the base under it: a darker, slightly larger rounded slab whose front edge shows
-    const baseGeo = new THREE.ExtrudeGeometry(rr(OW, OD, 0.56), { depth: 0.28, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3, curveSegments: 18 });
-    const base = new THREE.Mesh(baseGeo, sideMat);
-    base.rotation.x = -Math.PI / 2;
-    base.position.y = -0.7;
-    base.receiveShadow = true;
-    // dark groove round the panel, then the panel with a lighter lip
-    const groove = new THREE.Mesh(new THREE.ShapeGeometry(rr(PW + 0.04, PD + 0.04, 0.22), 12), new THREE.MeshStandardMaterial({ color: 0x4e1a00, roughness: 0.9 }));
-    groove.rotation.x = -Math.PI / 2;
-    groove.position.y = -0.03;
-    const lip = new THREE.Mesh(new THREE.ShapeGeometry(rr(PW - 0.02, PD - 0.02, 0.18), 12), new THREE.MeshStandardMaterial({ color: 0xfac68a, roughness: 0.55 }));
-    lip.rotation.x = -Math.PI / 2;
-    lip.position.y = -0.012;
-    const topMat = new THREE.MeshStandardMaterial({ color: 0xf2e2cf, map: tex, roughness: 0.62 });
-    const panel = new THREE.Mesh(new THREE.ShapeGeometry(rr(PW - 0.12, PD - 0.12, 0.13), 12), topMat);
-    panel.rotation.x = -Math.PI / 2;
-    panel.position.y = -0.006;
+    const foot = new THREE.Mesh(new RoundedBoxGeometry(W + FR * 2 - 0.06, 0.14, D + FR * 2 - 0.06, 4, 0.06), new THREE.MeshStandardMaterial({ color: 0x7a3d17, roughness: 0.6 }));
+    foot.position.y = -0.36;
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xf0d8b8, map: tex, roughness: 0.55 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfbc777, roughness: 0.45 });
+    // the panel: a thin slab with a rounded light edge (side material) and the wood on top
+    const panel = new THREE.Mesh(new RoundedBoxGeometry(W, 0.1, D, 4, 0.045), [edgeMat, edgeMat, topMat, edgeMat, edgeMat, edgeMat]);
+    panel.position.y = -0.02;
     panel.receiveShadow = true;
-    // ShapeGeometry UVs are in world units: scale the wood to fit the panel once
-    const uv = panel.geometry.attributes.uv as THREE.BufferAttribute;
-    for (let k = 0; k < uv.count; k++) uv.setXY(k, (uv.getX(k) + PW / 2) / PW, (uv.getY(k) + PD / 2) / PD);
-    this.board.add(base, frame, groove, lip, panel);
+    this.board.add(foot, frame, panel);
     // cream pegs: a slim stem with a round knob, standing in a dark carved hole
     const pegMat = new THREE.MeshStandardMaterial({ color: 0xf3e4c8, roughness: 0.4 });
     const headMat = new THREE.MeshStandardMaterial({ color: 0xf8ecd6, roughness: 0.32 });
     const holeMat = new THREE.MeshStandardMaterial({ color: 0x5e2e10, roughness: 0.85 });
     const lipMat = new THREE.MeshStandardMaterial({ color: 0x94481e, roughness: 0.75 });
-    const rimMat2 = new THREE.MeshStandardMaterial({ color: 0xc58d54, roughness: 0.7 });
-    const stem = new THREE.CylinderGeometry(0.1, 0.105, pegH, 20);
-    const knob = new THREE.SphereGeometry(0.17, 24, 16);
-    const neck = new THREE.CylinderGeometry(0.12, 0.1, 0.06, 20);
-    const holeG = new THREE.CircleGeometry(0.2, 28);
-    const lipG = new THREE.RingGeometry(0.2, 0.26, 28);
-    const rimG = new THREE.RingGeometry(0.26, 0.31, 28);
+    const stem = new THREE.CylinderGeometry(0.125, 0.13, pegH, 20);
+    const knob = new THREE.SphereGeometry(0.19, 24, 16);
+    const neck = new THREE.CylinderGeometry(0.15, 0.125, 0.07, 20);
+    const holeG = new THREE.CircleGeometry(0.19, 28);
+    const lipG = new THREE.RingGeometry(0.19, 0.24, 28);
     for (let p = 0; p < cols * rows; p++) {
       const at = this.pegPos(p);
       const peg = new THREE.Mesh(stem, pegMat);
@@ -558,19 +527,16 @@ export class Scene3D {
       const n = new THREE.Mesh(neck, pegMat);
       n.position.set(at.x, pegH + 0.0, at.z);
       const head = new THREE.Mesh(knob, headMat);
-      head.position.set(at.x, pegH + 0.12, at.z);
+      head.position.set(at.x, pegH + 0.14, at.z);
       head.scale.set(1, 0.9, 1);
       head.castShadow = true;
       const hole = new THREE.Mesh(holeG, holeMat);
       hole.rotation.x = -Math.PI / 2;
-      hole.position.set(at.x, 0.004, at.z);
+      hole.position.set(at.x, 0.034, at.z);
       const lip = new THREE.Mesh(lipG, lipMat);
       lip.rotation.x = -Math.PI / 2;
-      lip.position.set(at.x, 0.003, at.z);
-      const rim = new THREE.Mesh(rimG, rimMat2);
-      rim.rotation.x = -Math.PI / 2;
-      rim.position.set(at.x, 0.002, at.z);
-      this.board.add(peg, n, head, hole, lip, rim);
+      lip.position.set(at.x, 0.033, at.z);
+      this.board.add(peg, n, head, hole, lip);
     }
     strands.forEach((s, i) => {
       const h = 0.25 + depth[i] * step;
@@ -678,11 +644,11 @@ export class Scene3D {
     }
     // what must be on screen: the board's rim and the tops of the far pegs
     this.fit = [];
-    const fo = 0.13 + 0.5 + 0.02;
+    const fo = 0.2 + 0.02;
     for (const x of [-W / 2 - fo, W / 2 + fo]) {
-      this.fit.push(new THREE.Vector3(x, 0.12, -D / 2 - fo), new THREE.Vector3(x, -0.44, D / 2 + fo));
+      this.fit.push(new THREE.Vector3(x, 0, -D / 2 - fo), new THREE.Vector3(x, -0.43, D / 2 + fo));
     }
-    for (const p of [0, cols - 1]) this.fit.push(this.pegPos(p, pegH + 0.32));
+    for (const p of [0, cols - 1]) this.fit.push(this.pegPos(p, pegH + 0.34));
     this.target.set(0, 0, 0);
   }
 
@@ -861,7 +827,7 @@ export class Scene3D {
 
   private place(): void {
     // like the reference board: seen from above and in front, its thick front edge showing
-    const tilt = (58 * Math.PI) / 180;
+    const tilt = (63 * Math.PI) / 180;
     const dir = new THREE.Vector3(0, Math.sin(tilt), Math.cos(tilt));
     this.camera.zoom = 1;   // fit the whole board first; the player's zoom goes on top
     this.camera.clearViewOffset();
