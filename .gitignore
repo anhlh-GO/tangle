@@ -8,4 +8,4 @@ dist
 .falcon-publish
 
 # Capacitor Android project (generated in CI)
-android
+/android
