@@ -234,6 +234,35 @@ export class Scene3D {
   private knits = new Map<number, { level: number; from: number; to: number; t: number; dur: number; color: THREE.Color; plane: THREE.Plane; overlays: THREE.Mesh[]; y0: number; y1: number }>();
   private tints: THREE.Color[] = [];
   private toyPop = 0;
+  /** The round display stand under the toy (white top, glowing blue band, orange studs), sized per toy. */
+  private pedestal = new THREE.Group();
+  private buildPedestal(R: number): void {
+    const p = this.pedestal;
+    p.clear();
+    const m = (color: number, rough = 0.35, emissive = 0) => new THREE.MeshStandardMaterial({ color, roughness: rough, emissive: emissive ? new THREE.Color(emissive) : undefined, emissiveIntensity: emissive ? 1.1 : 0 });
+    const cyl = (r0: number, r1: number, h: number, y: number, mat: THREE.Material) => {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, 48), mat);
+      c.position.y = y;
+      c.receiveShadow = true;
+      c.castShadow = true;
+      p.add(c);
+      return c;
+    };
+    cyl(R, R, 0.1 * R, -0.05 * R, m(0xf4f7fb, 0.4));                    // top plate
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(R * 0.8, R * 0.015, 8, 64), m(0xc9d3e1, 0.5));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.002;
+    p.add(ring);
+    cyl(R * 1.02, R * 1.02, 0.07 * R, -0.135 * R, m(0x7fe0ff, 0.3, 0x2ab8ff)); // glowing band
+    cyl(R * 1.06, R * 1.16, 0.2 * R, -0.27 * R, m(0xdde5f0, 0.45));        // body
+    cyl(R * 1.2, R * 1.24, 0.12 * R, -0.43 * R, m(0x2e78e6, 0.35));        // blue base
+    for (const a of [0.65, -0.65, Math.PI - 0.65, Math.PI + 0.65]) {
+      const stud = new THREE.Mesh(new THREE.BoxGeometry(R * 0.16, R * 0.1, R * 0.06), m(0xff9a3c, 0.4));
+      stud.position.set(Math.sin(a) * R * 1.12, -0.27 * R, Math.cos(a) * R * 1.12);
+      stud.rotation.y = a;
+      p.add(stud);
+    }
+  }
   /** Level-clear showcase: k = how far in (0..1), spin = extra turn of the toy (radians). */
   private show = { k: 0, spin: 0 };
   private veil: { scene: THREE.Scene; cam: THREE.OrthographicCamera; mat: THREE.MeshBasicMaterial; rays: THREE.Mesh } | null = null;
@@ -267,7 +296,9 @@ export class Scene3D {
     const ground = new THREE.Mesh(new THREE.CircleGeometry(2.2, 40), new THREE.ShadowMaterial({ opacity: 0.18 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
+    ground.visible = false;   // the pedestal takes the toy's shadow now
     this.toyScene.add(ground);
+    this.toyScene.add(this.pedestal);
   }
 
   // ------------------------------------------------------------ the toy
@@ -279,11 +310,15 @@ export class Scene3D {
     this.toyScene.add(this.toy.group);
     this.knits.clear();
     this.tints = this.toy.parts.map(() => new THREE.Color(RAW));
+    const sz = new THREE.Box3().setFromObject(this.toy.group).getSize(new THREE.Vector3());
+    this.buildPedestal(Math.max(sz.x, sz.z) * 0.62);
     this.fitToy(this.toyCam, this.toy.group);
   }
   private fitToy(cam: THREE.PerspectiveCamera, g: THREE.Object3D): void {
-    const sphere = new THREE.Box3().setFromObject(g).getBoundingSphere(new THREE.Sphere());
-    const d = sphere.radius / Math.sin((cam.fov * Math.PI) / 360) * 0.8;
+    const box = new THREE.Box3().setFromObject(g);
+    if (g === this.toy?.group) box.expandByObject(this.pedestal);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const d = sphere.radius / Math.sin((cam.fov * Math.PI) / 360) * (g === this.toy?.group ? 0.7 : 0.8);
     cam.position.set(0, sphere.center.y + d * 0.42, d * 0.92);
     cam.lookAt(0, sphere.center.y * 0.92, 0);
   }
