@@ -27,6 +27,8 @@ import popFullJpg from './assets/pop_full.jpg';
 import popFullA from './assets/pop_full_a.png';
 import popIntroJpg from './assets/pop_intro.jpg';
 import popIntroA from './assets/pop_intro_a.png';
+import popFrozenJpg from './assets/pop_frozen.jpg';
+import popFrozenA from './assets/pop_frozen_a.png';
 
 /**
  * A cut-out picture shipped small: colour as JPEG + its alpha as a grey PNG, joined into a canvas once
@@ -107,6 +109,7 @@ async function buildPopups(): Promise<void> {
     make(popSettingsJpg, popSettingsA, { settings: [] }, 'settings'),
     make(popWinJpg, popWinA, { win: [WIN_TEXT] }, 'win'),
     make(popIntroJpg, popIntroA, { intro: [], introBlank: [INTRO_TITLE, INTRO_ART, INTRO_TEXT] }, 'intro'),
+    make(popFrozenJpg, popFrozenA, { introFrozen: [] }, 'frozen'),
     make(popFullJpg, popFullA, {
       full: [FULL_BALLS],
       fullNoSlot: [FULL_BALLS, FULL_SLOT_BTN],
@@ -116,8 +119,8 @@ async function buildPopups(): Promise<void> {
   ]);
 }
 // Boxes are measured on the original reference pictures; each cut-out keeps its crop origin and scale.
-const CUT = { settings: { ox: 60, oy: 94, s: 0.60491 }, win: { ox: 76, oy: 30, s: 0.58554 }, full: { ox: 53, oy: 81, s: 0.57866 }, intro: { ox: 61, oy: 84, s: 0.57762 } };
-const PIC_CUT: Record<string, keyof typeof CUT> = { settings: 'settings', win: 'win', full: 'full', fullNoSlot: 'full', fullAd: 'full', stuck: 'full', intro: 'intro', introBlank: 'intro' };
+const CUT = { settings: { ox: 60, oy: 94, s: 0.60491 }, win: { ox: 76, oy: 30, s: 0.58554 }, full: { ox: 53, oy: 81, s: 0.57866 }, intro: { ox: 61, oy: 84, s: 0.57762 }, frozen: { ox: 73, oy: 97, s: 0.59204 } };
+const PIC_CUT: Record<string, keyof typeof CUT> = { settings: 'settings', win: 'win', full: 'full', fullNoSlot: 'full', fullAd: 'full', stuck: 'full', intro: 'intro', introBlank: 'intro', introFrozen: 'frozen' };
 const cutBox = (k: keyof typeof CUT, [x0, y0, x1, y1]: Box): Box => {
   const c = CUT[k];
   return [Math.round((x0 - c.ox) * c.s), Math.round((y0 - c.oy) * c.s), Math.round((x1 - c.ox) * c.s), Math.round((y1 - c.oy) * c.s)];
@@ -144,6 +147,9 @@ const INTRO_TITLE: Box = [330, 112, 905, 218];
 const INTRO_ART: Box = [150, 296, 1082, 655];
 const INTRO_TEXT: Box = [190, 700, 1035, 850];
 const INTRO_OK: Box = [300, 915, 925, 1090];
+// Frozen Slot card (its own reference picture, with a close button)
+const FROZEN_OK: Box = [295, 935, 905, 1100];
+const FROZEN_X = { x: 1087, y: 207, r: 68 };
 void buildPopups();
 import { adBadge, bubble, button, card, gearButton, inside, pointer, toast, type BoosterKey, type Rect } from './ui';
 
@@ -301,7 +307,9 @@ function slotXY(k: number): { x: number; y: number; r: number } {
 let frozenHole = -1;     // the iced-over basket hole (Frozen Slot blocker), -1 = none
 let frozenN0 = 0;
 let iceBump = 0;
-let iceBreak = -1;       // shatter animation time, -1 = none
+let iceBreak = -1;       // final melt animation time, -1 = none
+let iceMelt = 0;         // eased share already melted (0..1)
+let dripT = 0;
 let shards: { x0: number; y0: number; t: number }[] = [];
 let lastPullAt = { x: 0, y: 0 };
 
@@ -351,6 +359,7 @@ function startLevel(index: number): void {
   frozenHole = S.frozen > 0 ? S.cap - 1 : -1;
   frozenN0 = S.frozen;
   iceBreak = -1;
+  iceMelt = 0;
   shards = [];
   scene.setToy(toyOf(level));
   plan = planToy();
@@ -445,13 +454,17 @@ function play(evs: Ev[]): void {
           if (run !== runId) return;
           iceBump = 1;
           if (left > 0) sfx.crack();
+          // a few drops run off each time it melts a step
+          const hd = holeXY(frozenHole);
+          for (let q = 0; q < 4; q++) particles.push({ x: hd.x + (Math.random() - 0.5) * hd.r * 1.6, y: hd.y - hd.r * 0.2, vx: (Math.random() - 0.5) * 60, vy: -40 - Math.random() * 60, life: 0, max: 0.5, color: q % 2 ? '#9fdcff' : '#e8f8ff', size: L.u * 0.009 });
           if (left === 0) {
             iceBreak = 0;
             sfx.shatter(); haptic([20, 30, 40]);
             const h = holeXY(frozenHole);
-            for (let k = 0; k < 22; k++) {
-              const a = Math.random() * Math.PI * 2, v = L.u * (0.25 + Math.random() * 0.6);
-              particles.push({ x: h.x, y: h.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - L.u * 0.2, life: 0, max: 0.5 + Math.random() * 0.4, color: Math.random() < 0.5 ? '#e8f8ff' : '#9fdcff', size: L.u * (0.01 + Math.random() * 0.012) });
+            // meltdown: a splash of water and a few last chips of ice
+            for (let k = 0; k < 26; k++) {
+              const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, v = L.u * (0.2 + Math.random() * 0.45);
+              particles.push({ x: h.x, y: h.y + h.r * 0.3, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 0.5 + Math.random() * 0.35, color: k % 3 === 0 ? '#ffffff' : k % 3 === 1 ? '#9fdcff' : '#5fb6e8', size: L.u * (0.008 + Math.random() * 0.01) });
             }
             floaters.push({ text: 'Slot free!', x: h.x, y: h.y - L.basket.h * 0.7, t: 0, color: '#bff0ff', size: L.u * 0.045 });
           }
@@ -822,38 +835,102 @@ function drawFrozenSlot(): void {
     ctx.restore();
   }
   if (!ice && iceBreak < 0) return;
-  const k = iceBreak >= 0 ? iceBreak / 0.6 : 0;
-  const sc = (1 + iceBump * 0.12) * (1 + k * 0.3);
-  const w = h.r * 2.1 * sc, hh = h.r * 1.9 * sc;
-  ctx.save();
-  ctx.globalAlpha = 1 - k;
-  ctx.translate(h.x, h.y - h.r * 0.05);
-  const g = ctx.createLinearGradient(0, -hh / 2, 0, hh / 2);
-  g.addColorStop(0, 'rgba(235,250,255,0.95)');
-  g.addColorStop(1, 'rgba(130,205,245,0.92)');
-  ctx.fillStyle = g;
-  ctx.strokeStyle = '#3f9ad6';
-  ctx.lineWidth = Math.max(2, h.r * 0.1);
-  roundRect(ctx, -w / 2, -hh / 2, w, hh, h.r * 0.45);
-  ctx.fill(); ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.75)';
-  roundRect(ctx, -w * 0.38, -hh * 0.42, w * 0.32, hh * 0.14, hh * 0.07);
-  ctx.fill();
-  // cracks: one more for every quarter melted
-  const melted = frozenN0 > 0 ? 1 - S.frozen / frozenN0 : 1;
-  ctx.strokeStyle = 'rgba(40,120,190,0.7)';
-  ctx.lineWidth = Math.max(1, h.r * 0.05);
-  const cracks = [[-0.45, -0.1, -0.1, 0.05, -0.2, 0.4], [0.45, -0.3, 0.1, -0.05, 0.25, 0.35], [-0.2, -0.45, -0.05, -0.15, 0.2, -0.3], [0.1, 0.45, -0.05, 0.2, -0.35, 0.3]];
-  for (let c = 0; c < Math.min(4, Math.floor(melted * 4 + (iceBreak >= 0 ? 4 : 0))); c++) {
-    const q = cracks[c];
-    ctx.beginPath(); ctx.moveTo(q[0] * w, q[1] * hh); ctx.lineTo(q[2] * w, q[3] * hh); ctx.lineTo(q[4] * w, q[5] * hh); ctx.stroke();
+  // k: the final melt (0..1); m: how much has melted so far (eased)
+  const k = iceBreak >= 0 ? Math.min(1, iceBreak / ICE_MELT) : 0;
+  const m = Math.min(1, iceMelt + k);
+  const W0 = h.r * 2.15, H0 = h.r * 1.95;
+  const w = W0 * (1 + iceBump * 0.08) * (1 - 0.12 * m), hh = Math.max(0, H0 * (1 - 0.42 * iceMelt) * (1 - k) * (1 + iceBump * 0.06));
+  const base = h.y + H0 * 0.47;            // the block stands in the hole and sinks as it melts
+  // a puddle spreading round the hole
+  const pw = h.r * (0.9 + 0.6 * m) * (k > 0.85 ? 1 - (k - 0.85) / 0.15 : 1);
+  if (pw > 0.5) {
+    ctx.fillStyle = `rgba(120,200,245,${0.25 + 0.35 * m})`;
+    ctx.beginPath(); ctx.ellipse(h.x, base - h.r * 0.05, pw, pw * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.3 * Math.sin(clock * 5)})`;
+    ctx.lineWidth = Math.max(1, h.r * 0.05);
+    ctx.beginPath(); ctx.ellipse(h.x - pw * 0.2, base - h.r * 0.08, pw * 0.4, pw * 0.1, 0, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
   }
-  if (ice) {
-    const warn = S.basket.length >= room(S) - 1 && !ended;
-    outlinedText(ctx, String(S.frozen), 0, hh * 0.04, h.r * (0.95 + iceBump * 0.3), warn && Math.sin(clock * 10) > 0 ? '#ffd0d0' : '#ffffff', '#1f6fb0');
+  if (hh > 1) {
+    ctx.save();
+    ctx.translate(h.x, base);
+    ctx.globalAlpha = 1 - 0.35 * k;
+    // body: a chunky ice cube, lighter at the top
+    const rr = Math.min(h.r * 0.42, hh * 0.45);
+    const g = ctx.createLinearGradient(0, -hh, 0, 0);
+    g.addColorStop(0, '#e9f9ff');
+    g.addColorStop(0.55, '#a9e2fb');
+    g.addColorStop(1, '#6cc3ee');
+    ctx.fillStyle = g;
+    ctx.strokeStyle = '#2e8fd6';
+    ctx.lineWidth = Math.max(2, h.r * 0.1);
+    roundRect(ctx, -w / 2, -hh, w, hh, rr);
+    ctx.fill(); ctx.stroke();
+    ctx.save();
+    roundRect(ctx, -w / 2, -hh, w, hh, rr);
+    ctx.clip();
+    // inner bevel + glassy highlights
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = Math.max(1.5, h.r * 0.07);
+    roundRect(ctx, -w / 2 + h.r * 0.14, -hh + h.r * 0.14, w - h.r * 0.28, Math.max(1, hh - h.r * 0.28), rr * 0.7);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.ellipse(-w * 0.22, -hh * 0.78, w * 0.16, hh * 0.08, -0.5, 0, Math.PI * 2); ctx.fill();
+    // cracks, one more for every quarter melted
+    ctx.strokeStyle = 'rgba(40,120,190,0.55)';
+    ctx.lineWidth = Math.max(1, h.r * 0.045);
+    const cracks = [[-0.45, -0.55, -0.1, -0.45, -0.2, -0.1], [0.45, -0.8, 0.1, -0.55, 0.25, -0.2], [-0.2, -0.95, -0.05, -0.7, 0.2, -0.8], [0.1, -0.05, -0.05, -0.3, -0.35, -0.25]];
+    for (let c = 0; c < Math.min(4, Math.floor(m * 4 + 0.001)); c++) {
+      const q = cracks[c];
+      ctx.beginPath(); ctx.moveTo(q[0] * w, q[1] * hh); ctx.lineTo(q[2] * w, q[3] * hh); ctx.lineTo(q[4] * w, q[5] * hh); ctx.stroke();
+    }
+    ctx.restore();
+    // snow caps on the top corners, icicles under them (shrinking as it melts)
+    const snow = Math.max(0, 1 - m * 1.2);
+    if (snow > 0.02) {
+      ctx.fillStyle = '#ffffff';
+      for (const sx of [-1, 1]) {
+        const cx2 = sx * (w / 2 - h.r * 0.28);
+        ctx.beginPath();
+        ctx.ellipse(cx2, -hh + h.r * 0.04, h.r * 0.36 * snow, h.r * 0.16 * snow, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx2 - sx * h.r * 0.22, -hh + h.r * 0.1, h.r * 0.2 * snow, h.r * 0.12 * snow, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx2 - h.r * 0.08, -hh + h.r * 0.12);
+        ctx.lineTo(cx2, -hh + h.r * (0.12 + 0.3 * snow));
+        ctx.lineTo(cx2 + h.r * 0.08, -hh + h.r * 0.12);
+        ctx.fill();
+      }
+    }
+    if (ice && hh > h.r * 0.5) {
+      const warn = S.basket.length >= room(S) - 1 && !ended;
+      outlinedText(ctx, String(S.frozen), 0, -hh * 0.48, Math.min(h.r * (0.95 + iceBump * 0.3), hh * 0.7), warn && Math.sin(clock * 10) > 0 ? '#ffd0d0' : '#ffffff', '#1f5fae');
+    }
+    ctx.restore();
   }
-  ctx.restore();
+  // steam rising while it melts away
+  if (k > 0) {
+    for (let i = 0; i < 4; i++) {
+      const t = (k * 1.6 + i * 0.25) % 1;
+      ctx.fillStyle = `rgba(255,255,255,${0.5 * (1 - t) * (1 - k * 0.5)})`;
+      ctx.beginPath(); ctx.arc(h.x + (i - 1.5) * h.r * 0.35 + Math.sin(t * 6 + i) * h.r * 0.1, base - h.r * 0.3 - t * h.r * 1.6, h.r * (0.18 + t * 0.25), 0, Math.PI * 2); ctx.fill();
+    }
+  }
 }
+
+/** Water drips from the iced slot while it melts (more as it goes), and the meltdown splash. */
+function updateIce(dt: number): void {
+  if (frozenHole < 0) return;
+  const target = frozenN0 > 0 ? 1 - S.frozen / frozenN0 : 0;
+  iceMelt += (Math.min(target, 0.999) - iceMelt) * Math.min(1, dt * 4);
+  if (S.frozen <= 0 && iceBreak < 0) return;
+  const h = holeXY(frozenHole);
+  dripT -= dt;
+  if (dripT <= 0 && (iceMelt > 0.05 || iceBreak >= 0)) {
+    dripT = iceBreak >= 0 ? 0.05 : 0.9 - 0.6 * iceMelt;
+    particles.push({ x: h.x + (Math.random() - 0.5) * h.r * 1.4, y: h.y + h.r * 0.3, vx: 0, vy: 20, life: 0, max: 0.35, color: '#7cc8f0', size: L.u * 0.008 });
+  }
+}
+const ICE_MELT = 0.9;
 
 // ---------------------------------------------------------------- drill (+Slot)
 
@@ -1157,7 +1234,8 @@ function update(dt: number): void {
   lastRoom = left;
   if (show) { show.t += dt; if (show.t >= SHOW) show = null; }
   iceBump = Math.max(0, iceBump - dt * 4);
-  if (iceBreak >= 0) { iceBreak += dt; if (iceBreak > 0.6) iceBreak = -1; }
+  if (iceBreak >= 0) { iceBreak += dt; if (iceBreak > ICE_MELT) iceBreak = -1; }
+  updateIce(dt);
   for (const sh of shards) sh.t += dt / 0.38;
   shards = shards.filter((sh) => sh.t < 1);
   for (let k = timers.length - 1; k >= 0; k--) if (timers[k].t <= clock) timers.splice(k, 1)[0].res();
@@ -1671,9 +1749,13 @@ function drawPopup(): void {
     }
   } else if (p.kind === 'intro') {
     // the Mystery Yarn card is the reference picture as it is; the others reuse its frame
-    const asIs = p.blocker === 'hidden';
-    const P = popupPic(asIs ? 'intro' : 'introBlank', 0.9);
-    if (P) {
+    const asIs = p.blocker === 'hidden' || p.blocker === 'frozen';
+    const P = popupPic(p.blocker === 'frozen' ? 'introFrozen' : asIs ? 'intro' : 'introBlank', 0.9);
+    if (P && p.blocker === 'frozen') {
+      drawPic(P);
+      hotspot('close', boxAt(P, FROZEN_OK));
+      hotspot('close', boxAt(P, [FROZEN_X.x - FROZEN_X.r, FROZEN_X.y - FROZEN_X.r, FROZEN_X.x + FROZEN_X.r, FROZEN_X.y + FROZEN_X.r]), true);
+    } else if (P) {
       drawPic(P);
       if (!asIs) {
         const title = p.booster ? 'New Booster!' : p.blocker ? INTRO[p.blocker].title : '';

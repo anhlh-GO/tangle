@@ -144,49 +144,99 @@ export const sfx = {
 
 // ---------------------------------------------------------------- music box
 
-const SONG = [0, 4, 7, 12, 9, 7, 4, 7, 5, 9, 12, 9, 7, 4, 2, 4, 0, 4, 7, 12, 14, 12, 9, 7, 5, 4, 2, 4, 7, 4, 0, -1];
-const BASS = [0, -5, -3, -7];
+// Chill lo-fi loop: slow 7th-chord pads through a soft low-pass, a quiet bass, and a few
+// sparse plucked notes picked from the chord — calm enough to sit under the game.
+const CHORDS = [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]];   // Fmaj7 Em7 Dm7 Cmaj7
+const BEAT = 60 / 70;
 let musicTimer = 0;
-let nextNote = 0;
-let step = 0;
+let nextBeat = 0;
+let beat = 0;
+let musicBus: GainNode | null = null;
+const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
 function startMusic(): void {
-  if (musicTimer || !ctx) return;
-  nextNote = ctx.currentTime + 0.2;
+  if (musicTimer || !ctx || !master) return;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 1100;
+  lp.Q.value = 0.5;
+  musicBus = ctx.createGain();
+  musicBus.gain.value = flags.music ? 1 : 0;
+  musicBus.connect(lp).connect(master);
+  nextBeat = ctx.currentTime + 0.3;
+  let rnd = 7;
+  const rand = () => ((rnd = (rnd * 16807) % 2147483647) / 2147483647);
   musicTimer = window.setInterval(() => {
     if (!ctx || ctx.state !== 'running') return;
-    while (nextNote < ctx.currentTime + 0.3) {
-      if (flags.music && !paused) {
-        const n = SONG[step % SONG.length];
-        const at = nextNote - ctx.currentTime;
-        if (n >= 0) bell(523.25 * Math.pow(2, n / 12), at, 0.045);
-        if (step % 8 === 0) bell(130.8 * Math.pow(2, BASS[(step / 8) % 4 | 0] / 12), at, 0.05, 1.4);
+    while (nextBeat < ctx.currentTime + 0.5) {
+      const on = flags.music && !paused;
+      const chord = CHORDS[Math.floor(beat / 8) % CHORDS.length];
+      if (on) {
+        if (beat % 8 === 0) {
+          for (const m of chord) pad(hz(m), nextBeat, BEAT * 8.4, 0.016);
+          soft(hz(chord[0] - 12), nextBeat, BEAT * 3.5, 0.035);
+        }
+        if (beat % 8 === 4) soft(hz(chord[0] - 12), nextBeat, BEAT * 3.5, 0.025);
+        // a few soft plucks from the chord, an octave up, never on every beat
+        if (rand() < 0.38) pluck(hz(chord[Math.floor(rand() * chord.length)] + 12), nextBeat + (rand() < 0.3 ? BEAT / 2 : 0), 0.03);
       }
-      nextNote += 0.24;
-      step++;
+      nextBeat += BEAT;
+      beat++;
     }
-  }, 100);
+  }, 120);
 }
 
-function bell(f: number, delay: number, vol: number, len = 0.7): void {
-  if (!ready()) return;
-  const t = ctx!.currentTime + Math.max(0, delay);
-  for (const [mul, v] of [[1, 1], [2.01, 0.3], [3.98, 0.08]] as const) {
-    const o = ctx!.createOscillator();
-    const g = ctx!.createGain();
+/** A slow swelling pad note: two slightly detuned soft oscillators. */
+function pad(f: number, at: number, len: number, vol: number): void {
+  if (!ctx || !musicBus) return;
+  for (const [type, det] of [['triangle', -4], ['sine', 5]] as const) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.value = f;
+    o.detune.value = det;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(vol, at + 1.6);
+    g.gain.setValueAtTime(vol, at + len - 1.8);
+    g.gain.linearRampToValueAtTime(0.0001, at + len);
+    o.connect(g).connect(musicBus);
+    o.start(at);
+    o.stop(at + len + 0.1);
+  }
+}
+/** A round, quiet sine (bass). */
+function soft(f: number, at: number, len: number, vol: number): void {
+  if (!ctx || !musicBus) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.linearRampToValueAtTime(vol, at + 0.08);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+  o.connect(g).connect(musicBus);
+  o.start(at);
+  o.stop(at + len + 0.05);
+}
+/** A gentle plucked note (like a muted electric piano). */
+function pluck(f: number, at: number, vol: number): void {
+  if (!ctx || !musicBus) return;
+  for (const [mul, v] of [[1, 1], [2, 0.18]] as const) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'sine';
     o.frequency.value = f * mul;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol * v, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
-    o.connect(g).connect(master!);
-    o.start(t);
-    o.stop(t + len + 0.05);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(vol * v, at + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 1.4);
+    o.connect(g).connect(musicBus);
+    o.start(at);
+    o.stop(at + 1.5);
   }
 }
 
 let paused = false;
-export function setAudioPaused(p: boolean): void { paused = p; }
+export function setAudioPaused(p: boolean): void {
+  paused = p;
+  if (ctx && musicBus) musicBus.gain.setTargetAtTime(p || !flags.music ? 0 : 1, ctx.currentTime, 0.15);
+}
 
 /** Vibrate: one pulse (ms) or a pattern [on, off, on…]. */
 export function haptic(ms: number | number[]): void {
@@ -198,6 +248,7 @@ export function haptic(ms: number | number[]): void {
 export const audio = {
   set(key: Key, on: boolean): void {
     flags[key] = on;
+    if (key === 'music' && ctx && musicBus) musicBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.15);
     try { localStorage.setItem(STORE, JSON.stringify(flags)); } catch { /* ignore */ }
   },
   get(key: Key): boolean { return flags[key]; },

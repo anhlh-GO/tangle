@@ -136,18 +136,56 @@ function outlineMaterial(color: THREE.Color): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color: ropeColor(color).multiplyScalar(0.28), side: THREE.BackSide });
 }
 /** A wound ball of rope: a core with strands wrapped round it every which way. */
-export function ropeBall(mat: THREE.Material, r = 0.3): THREE.Group {
+let fiberTex: THREE.CanvasTexture | null = null;
+/** Soft wool: fine fibres running along the strand, a little fuzz — so the yarn reads as cloth, not plastic. */
+function fiberTexture(): THREE.CanvasTexture {
+  if (fiberTex) return fiberTex;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 128, 64);
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 420; k++) {
+    const x = rnd() * 128, y = rnd() * 64, len = 6 + rnd() * 18;
+    g.strokeStyle = rnd() < 0.55 ? `rgba(0,0,0,${0.05 + rnd() * 0.1})` : `rgba(255,255,255,${0.25 + rnd() * 0.3})`;
+    g.lineWidth = 0.6 + rnd() * 0.9;
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + len / 2, y + (rnd() - 0.5) * 3, x + len, y + (rnd() - 0.5) * 2); g.stroke();
+  }
+  fiberTex = new THREE.CanvasTexture(c);
+  fiberTex.wrapS = fiberTex.wrapT = THREE.RepeatWrapping;
+  fiberTex.colorSpace = THREE.SRGBColorSpace;
+  return fiberTex;
+}
+/** Matte wool with a soft velvety sheen (used for the balls of yarn). */
+function woolMaterial(color: THREE.Color, rep = 3): THREE.MeshPhysicalMaterial {
+  const map = fiberTexture().clone();
+  map.needsUpdate = true;
+  map.repeat.set(rep, 1);
+  const c = ropeColor(color);
+  return new THREE.MeshPhysicalMaterial({ color: c, map, vertexColors: true, roughness: 0.9, metalness: 0, sheen: 1, sheenRoughness: 0.55, sheenColor: c.clone().lerp(new THREE.Color(0xffffff), 0.55) });
+}
+/** A ball of wool: a soft core wound round with many thin strands every which way, and a loose end. */
+export function ropeBall(color: THREE.Color, r = 0.3): THREE.Group {
   const g = new THREE.Group();
-  const coreG = new THREE.SphereGeometry(r * 0.93, 24, 18);
-  coreG.setAttribute('color', new THREE.BufferAttribute(new Float32Array(coreG.attributes.position.count * 3).fill(0.7), 3));
-  const core = new THREE.Mesh(coreG, mat);
-  g.add(core);
-  const turns = [[0, 0], [1.1, 0.3], [-0.9, 0.8], [0.4, 1.5], [1.6, -0.7], [-0.3, 2.3], [0.8, 2.9]];
-  for (const [ax, az] of turns) {
-    const ring = new THREE.Mesh(ropeGeometry(new CircleCurve(r * 0.98), 40, r * 0.14, true), mat);
-    ring.rotation.set(ax, 0, az);
+  const coreG = new THREE.SphereGeometry(r * 0.9, 28, 20);
+  coreG.setAttribute('color', new THREE.BufferAttribute(new Float32Array(coreG.attributes.position.count * 3).fill(0.82), 3));
+  g.add(new THREE.Mesh(coreG, woolMaterial(color, 6)));
+  const strand = woolMaterial(color, 10);
+  let seed = 5;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 24; k++) {
+    const ring = new THREE.Mesh(ropeGeometry(new CircleCurve(r * (0.92 + rnd() * 0.06)), 48, r * 0.088, true), strand);
+    ring.rotation.set(rnd() * Math.PI, rnd() * Math.PI, rnd() * Math.PI);
     g.add(ring);
   }
+  // the loose end trailing off the ball
+  const tail = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(r * 0.2, r * 0.9, r * 0.35), new THREE.Vector3(r * 0.6, r * 0.75, r * 0.65),
+    new THREE.Vector3(r * 0.95, r * 0.35, r * 0.7), new THREE.Vector3(r * 1.25, -r * 0.15, r * 0.5),
+  ]);
+  g.add(new THREE.Mesh(ropeGeometry(tail, 24, r * 0.07), strand));
   g.traverse((o) => { o.castShadow = true; });
   return g;
 }
@@ -354,7 +392,7 @@ export class Scene3D {
     const l = new THREE.DirectionalLight(0xffffff, 2.4);
     l.position.set(-2, 4, 5);
     scene.add(l);
-    const ball = ropeBall(ropeMaterial(new THREE.Color(color)), 1);
+    const ball = ropeBall(new THREE.Color(color), 1);
     ball.rotation.set(0.5, 0.3, 0.2);
     scene.add(ball);
     const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
@@ -649,7 +687,7 @@ export class Scene3D {
       if (v.bead) v.bead.visible = true;
       if (v.ball) v.ball.visible = false;
     } else if (!v.ball) {
-      v.ball = ropeBall(v.mat);
+      v.ball = ropeBall(v.color);
       v.ball.visible = false;
       this.board.add(v.ball);
     }
