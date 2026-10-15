@@ -441,6 +441,7 @@ function play(evs: Ev[]): void {
         streak = clock - lastKnit < 3 ? streak + 1 : 1;
         lastKnit = clock;
         sfx.knit(streak);
+        coachEvent('knit');
         haptic([15, 30, 15]);
         const lead = group[1];
         burst(lead.x, lead.y, YARN[c].color, 16, 1.1);
@@ -728,6 +729,7 @@ function spend(k: BoosterKey): void {
 }
 
 function snip(i: number): void {
+  coachEvent('snip');
   history.push({ s: clone(S), revealed: revealed.slice() });
   armed = null;
   if (!freeSnip) spend('scissors');
@@ -1022,26 +1024,60 @@ function drawDrill(): void {
 
 // ---------------------------------------------------------------- tutorial
 
-interface CoachStep { text: string; at?: () => { x: number; y: number } | null; allow?: (what: string) => boolean; until: 'tap' | 'pull'; t?: number }
+/**
+ * One tutorial step: a speech bubble, an optional hand pointing at `at` (with a spotlight round it),
+ * what the player may touch (`allow`: 's<i>' strand, 'b_<key>' booster, 'z' zoom) and what ends it.
+ */
+type CoachUntil = 'tap' | 'pull' | 'knit' | 'booster' | 'snip' | 'zoom';
+interface CoachStep { text: string; at?: () => { x: number; y: number } | null; allow?: (what: string) => boolean; until: CoachUntil; t?: number; r?: number }
 let coach: { steps: CoachStep[]; i: number; t: number } | null = null;
+/** The next good strand to pull (careful bot), remembered until the board changes. */
+let hintMemo = { key: '', strand: -1 };
+function bestStrand(): number {
+  const key = S.gone.map((g) => (g ? 1 : 0)).join('') + S.basket.join('');
+  if (hintMemo.key !== key) hintMemo = { key, strand: solve(S, 6)?.[0] ?? S.strands.findIndex((_, i) => canPull(S, i)) };
+  return hintMemo.strand;
+}
+const strandAt = (i: number) => (i >= 0 && !S.gone[i] ? scene.toScreen(scene.midOf(i)) : null);
+const basketAt = () => ({ x: L.basket.x + L.basket.w / 2, y: L.basket.y + L.basket.h * 0.55 });
+const boosterPoint = (k: BoosterKey) => { const p = boosterAt(BOOSTERS.indexOf(k)); return { x: p.x, y: p.y }; };
 
 function setupTutorial(): void {
   introQueue = [];
   const steps: CoachStep[] = [];
   if (level === 0 && !save.seen.t1) {
+    // first game: step by step, until the first toy part is knitted
     const top = S.strands.reduce((b, s, i) => (s.layer > S.strands[b].layer ? i : b), 0);
+    const stuckOne = () => S.strands.findIndex((_, i) => !S.gone[i] && !free(S, i));
     steps.push(
-      { text: 'Tap the yarn on top to pull it off!', at: () => scene.toScreen(scene.midOf(top)), allow: (w) => w === `s${top}`, until: 'pull' },
-      { text: 'Pulled yarn rolls into the basket. Three of one color — the cat knits them!', at: () => ({ x: L.basket.x + L.basket.w / 2, y: L.basket.y + L.basket.h * 0.6 }), until: 'tap', t: 6 },
-      { text: 'Yarn underneath is stuck until nothing lies on it. Don’t let the basket fill up!', until: 'tap', t: 6 },
+      { text: 'Welcome! Untangle the yarn to knit this cute toy.', at: () => scene.toyCenter(), until: 'tap', t: 5, r: L.u * 0.22 },
+      { text: 'Tap the yarn on top to pull it off!', at: () => strandAt(top), allow: (w) => w === `s${top}`, until: 'pull' },
+      { text: 'It rolls into a ball and drops into the basket.', at: basketAt, until: 'tap', t: 4, r: L.u * 0.2 },
+      { text: 'This one is stuck — another strand lies on top of it. Free the top ones first!', at: () => strandAt(stuckOne()), until: 'tap', t: 5 },
+      { text: 'Pull another strand of the same color.', at: () => strandAt(bestStrand()), allow: (w) => w === `s${bestStrand()}`, until: 'pull' },
+      { text: 'Three of one color make a match — keep going!', at: () => strandAt(bestStrand()), allow: (w) => w === `s${bestStrand()}`, until: 'knit' },
+      { text: 'Match! The three balls knit a part of the toy.', at: () => scene.toyCenter(), until: 'tap', t: 4, r: L.u * 0.22 },
+      { text: 'The basket has only a few holes. If it fills up, you lose!', at: basketAt, until: 'tap', t: 5, r: L.u * 0.2 },
+      { text: 'Knit the whole toy to win. Your progress shows up here.', at: () => ({ x: L.bar.x + L.bar.w / 2, y: L.bar.y + L.bar.h / 2 }), until: 'tap', t: 5 },
     );
     save.seen.t1 = true;
+  }
+  if (level === 1 && !save.seen.t2) {
+    // second game: zoom and settings
+    const zp = () => { const b = zoomButtons()[0]; return { x: b.x, y: b.y }; };
+    steps.push(
+      { text: 'Busy board? Tap the magnifier (or pinch) to zoom in. Drag to look around.', at: zp, allow: (w) => w === 'z', until: 'zoom', t: 7, r: L.u * 0.08 },
+      { text: 'Sound, music, vibration and restart are under the gear.', at: () => ({ x: L.gear.x, y: L.gear.y }), until: 'tap', t: 4, r: L.u * 0.09 },
+    );
+    save.seen.t2 = true;
   }
   for (const k of BOOSTERS) {
     if (level + 1 === UNLOCK[k] && !save.seen[`b_${k}`]) {
       save.seen[`b_${k}`] = true;
       save.b[k] = Math.max(save.b[k], 2);
       introQueue.push(() => { popup = { kind: 'intro', t: 0, booster: k }; });
+      const lesson = boosterCoach(k);
+      if (lesson.length) introQueue.push(() => { coach = { steps: lesson, i: 0, t: 0 }; });
     }
   }
   for (const b of ['hidden', 'frozen', 'lock'] as const) {
@@ -1057,6 +1093,24 @@ function setupTutorial(): void {
   coach = steps.length ? { steps, i: 0, t: 0 } : null;
   if (!coach && banner.t <= 0) runQueue();
 }
+/** A guided first use of each booster, right after its card. */
+function boosterCoach(k: BoosterKey): CoachStep[] {
+  const r = L.u * 0.11;
+  if (k === 'undo') return [
+    { text: 'Pull any strand…', at: () => strandAt(bestStrand()), until: 'pull' },
+    { text: '…now tap Undo to put it back!', at: () => boosterPoint('undo'), allow: (w) => w === 'b_undo', until: 'booster', r },
+    { text: 'Undo takes back your last pull. Handy when the basket gets tight!', until: 'tap', t: 4 },
+  ];
+  if (k === 'scissors') return [
+    { text: 'Tap Scissors.', at: () => boosterPoint('scissors'), allow: (w) => w === 'b_scissors', until: 'booster', r },
+    { text: 'Now tap a strand that is stuck underneath — snip!', at: () => strandAt(S.strands.findIndex((_, i) => !S.gone[i] && !free(S, i))), until: 'snip' },
+  ];
+  if (S.cap >= MAX_CAP) return [];
+  return [
+    { text: 'Tap +Slot to drill one more hole in the basket!', at: () => boosterPoint('slot'), allow: (w) => w === 'b_slot', until: 'booster', r },
+    { text: 'More room in the basket = more time to make matches.', at: basketAt, until: 'tap', t: 4, r: L.u * 0.2 },
+  ];
+}
 function blockerCoach(b: keyof typeof INTRO): CoachStep[] {
   const first = (f: (i: number) => boolean) => S.strands.findIndex((_, i) => !S.gone[i] && f(i));
   if (b === 'hidden') {
@@ -1071,7 +1125,7 @@ function blockerCoach(b: keyof typeof INTRO): CoachStep[] {
   ];
 }
 function runQueue(): void { const f = introQueue.shift(); if (f) f(); }
-function coachEvent(what: 'pull' | 'tap'): void {
+function coachEvent(what: CoachUntil): void {
   if (!coach || coach.steps[coach.i].until !== what) return;
   coach.i++;
   coach.t = 0;
@@ -1087,11 +1141,12 @@ function onTap(x: number, y: number): void {
   if (popup) { void popupTap(x, y); return; }
   if (banner.t > 0.3) { banner.t = 0.3; return; }
   if (coach && coach.steps[coach.i].until === 'tap') { coachEvent('tap'); return; }
+  if (coach && coach.steps[coach.i].until === 'zoom' && !zoomButtonAt(x, y)) return;
   if (Math.hypot(x - L.gear.x, y - L.gear.y) < L.gear.r * 1.5) { popup = { kind: 'settings', t: 0 }; sfx.tap(); return; }
   const zb = zoomButtonAt(x, y);
   if (zb) {
     const z0 = scene.zoomLevel, z = zb === 'in' ? Math.min(2, z0 + 0.35) : Math.max(1, z0 - 0.35);
-    if (z !== z0) { scene.setZoom(z); sfx.zoom(zb === 'in'); press.set(`z_${zb}`, 1); } else sfx.nope();
+    if (z !== z0) { scene.setZoom(z); sfx.zoom(zb === 'in'); press.set(`z_${zb}`, 1); coachEvent('zoom'); } else sfx.nope();
     return;
   }
   for (let k = 0; k < BOOSTERS.length; k++) {
@@ -1100,7 +1155,11 @@ function onTap(x: number, y: number): void {
       const key = BOOSTERS[k];
       press.set(key, 1);
       if (boosterLocked(key)) showToast(`Unlocks at level ${UNLOCK[key]}`);
-      else if (!coach) void useBooster(key);
+      else if (!coach || (coach.steps[coach.i].allow && coachAllows(`b_${key}`))) {
+        if (busy) return;   // wait until the last ball has landed
+        void useBooster(key);
+        coachEvent('booster');
+      }
       return;
     }
   }
@@ -1187,7 +1246,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (!pointers.has(e.pointerId)) return;
   const p = local(e);
   pointers.set(e.pointerId, p);
-  if (pinch && pointers.size >= 2) { scene.setZoom(pinch.z0 * (spread() / pinch.d0)); return; }
+  if (pinch && pointers.size >= 2) { scene.setZoom(pinch.z0 * (spread() / pinch.d0)); coachEvent('zoom'); return; }
   if (held && held.id === e.pointerId) {
     if (!held.moved && Math.hypot(p.x - held.x0, p.y - held.y0) > 9 && scene.zoomLevel > 1.01) held.moved = true;
     if (held.moved) scene.panBy(p.x - held.x, p.y - held.y);
@@ -1210,6 +1269,7 @@ canvas.addEventListener('wheel', (e) => {
   if (popup || !scene.inView(p.x, p.y)) return;
   e.preventDefault();
   scene.setZoom(scene.zoomLevel * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+  coachEvent('zoom');
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && popupButtons[0]) { const b = popupButtons[0].r; onTap(b.x + b.w / 2, b.y + b.h / 2); }
@@ -1230,7 +1290,14 @@ function update(dt: number): void {
   }
   // one alarm when the basket gets down to its last free slot
   const left = room(S) - S.basket.length;
-  if (left === 1 && lastRoom !== 1 && !ended && S.basket.length > 0) { sfx.alarm(); haptic([20, 40, 20]); }
+  if (left === 1 && lastRoom !== 1 && !ended && S.basket.length > 0) {
+    sfx.alarm(); haptic([20, 40, 20]);
+    if (!save.seen.tipFull && !coach && !popup) {
+      save.seen.tipFull = true;
+      persist();
+      coach = { steps: [{ text: 'Careful — one hole left! Pull a color that is already in the basket.', at: basketAt, until: 'tap', t: 4, r: L.u * 0.2 }], i: 0, t: 0 };
+    }
+  }
   lastRoom = left;
   if (show) { show.t += dt; if (show.t >= SHOW) show = null; }
   iceBump = Math.max(0, iceBump - dt * 4);
@@ -1817,7 +1884,24 @@ function drawCoach(): void {
   const st = coach.steps[coach.i];
   const a = Math.min(1, coach.t / 0.25);
   const at = st.at?.() ?? null;
-  const by = at && at.y > L.H * 0.6 ? L.viewTop + L.u * 0.1 : L.basket.y - L.u * 0.09;
+  if (at) {
+    // spotlight: the screen darkens except a soft circle round what we point at
+    const R = st.r ?? L.u * 0.13;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(8,12,38,0.5)';
+    ctx.beginPath();
+    ctx.rect(0, 0, L.W, L.H);
+    ctx.arc(at.x, at.y, R, 0, Math.PI * 2, true);
+    ctx.fill('evenodd');
+    ctx.strokeStyle = `rgba(255,255,255,${0.55 + 0.25 * Math.sin(clock * 5)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(at.x, at.y, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // the bubble sits where it covers neither the target nor the board's middle
+  let by = !at ? L.basket.y - L.u * 0.09 : at.y > L.H * 0.55 ? Math.min(at.y - L.u * 0.28, L.viewTop + L.u * 0.02) : Math.max(at.y + L.u * 0.26, L.basket.y + L.basket.h + L.u * 0.08);
+  by = Math.min(Math.max(by, L.hudY + L.u * 0.12), L.H - L.u * 0.3);
   const br = bubble(ctx, st.text, L.colX + L.colW / 2, by, L.colW * 0.86, L.u * 0.042, a);
   if (at) pointer(ctx, at.x, at.y, L.u * 0.07, clock);
   if (st.until === 'tap') outlinedText(ctx, 'Tap to continue', L.colX + L.colW / 2, br.y + br.h + L.u * 0.03, L.u * 0.03, '#ffffff', '#6e1037');
