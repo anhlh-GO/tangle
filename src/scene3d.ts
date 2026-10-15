@@ -171,6 +171,10 @@ export class Scene3D {
   private target = new THREE.Vector3();
   private ray = new THREE.Raycaster();
   private chains: Chain[] = [];
+  /** Board zoom (1 = whole board fits) and pan (world units on the board plane), eased toward their targets. */
+  private zoom = { cur: 1, to: 1, px: 0, pz: 0, tx: 0, tz: 0, w: 6, d: 7 };
+  static readonly ZOOM_MIN = 1;
+  static readonly ZOOM_MAX = 2;
   private pegH = 0.8;
   private lockFx: { pad: THREE.Group; shackle: THREE.Mesh; key: THREE.Group | null; keyHome: THREE.Vector3; at: THREE.Vector3; t: number; open: boolean; shake: number; strands: number[] } | null = null;
   private mysteryTex = mysteryTexture();
@@ -436,7 +440,9 @@ export class Scene3D {
     this.strands = [];
     this.chains = [];
     this.lockFx = null;
+    Object.assign(this.zoom, { cur: 1, to: 1, px: 0, pz: 0, tx: 0, tz: 0 });
     const W = (cols - 1) * SP + 1.3, D = (rows - 1) * SP + 1.3;
+    this.zoom.w = W; this.zoom.d = D;
     const top = Math.max(1, ...depth);
     // many layers: squeeze them so the pegs stay short, as in the reference
     const step = Math.min(STEP, 0.75 / top);
@@ -773,6 +779,7 @@ export class Scene3D {
     // like the reference board: seen from above and in front, its thick front edge showing
     const tilt = (58 * Math.PI) / 180;
     const dir = new THREE.Vector3(0, Math.sin(tilt), Math.cos(tilt));
+    this.camera.zoom = 1;   // fit the whole board first; the player's zoom goes on top
     this.camera.clearViewOffset();
     const bounds = () => {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -799,8 +806,41 @@ export class Scene3D {
     const { w, h } = this.view;
     // centred left-right; the board's far edge sits right under the basket, as in the reference
     this.camera.setViewOffset(w, h, (((b.x0 + b.x1) / 2) * w) / 2, ((0.985 - b.y1) * h) / 2, w, h);
+    // the player's zoom + pan on top of the fit
+    const z = this.zoom;
+    z.cur += (z.to - z.cur) * 0.25;
+    if (Math.abs(z.to - z.cur) < 0.002) z.cur = z.to;
+    this.clampPan();
+    z.px += (z.tx - z.px) * 0.35;
+    z.pz += (z.tz - z.pz) * 0.35;
+    this.camera.position.x += z.px;
+    this.camera.position.z += z.pz;
+    this.camera.updateMatrixWorld();
+    this.camera.zoom = z.cur;
     this.camera.updateProjectionMatrix();
   }
+
+  get zoomLevel(): number { return this.zoom.to; }
+  /** Zoom the board to `z` (clamped between the whole board and about twice as close). */
+  setZoom(z: number): void {
+    this.zoom.to = Math.min(Scene3D.ZOOM_MAX, Math.max(Scene3D.ZOOM_MIN, z));
+    if (this.zoom.to <= Scene3D.ZOOM_MIN + 0.001) { this.zoom.tx = 0; this.zoom.tz = 0; }
+  }
+  /** Drag the zoomed board by a screen distance (css px). */
+  panBy(dx: number, dy: number): void {
+    const perPx = (this.zoom.w + 0.6) / Math.max(1, this.view.w) / this.zoom.cur;
+    this.zoom.tx -= dx * perPx;
+    this.zoom.tz -= dy * perPx * 1.15;
+    this.clampPan();
+  }
+  private clampPan(): void {
+    const z = this.zoom, k = 1 - 1 / Math.max(1, z.to);
+    const mx = (z.w / 2 + 0.3) * k, mz = (z.d / 2 + 0.3) * k;
+    z.tx = Math.max(-mx, Math.min(mx, z.tx));
+    z.tz = Math.max(-mz, Math.min(mz, z.tz));
+  }
+  /** Is the page point over the board's view? */
+  inView(x: number, y: number): boolean { const v = this.view; return x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h; }
 
   toScreen(v: THREE.Vector3): { x: number; y: number } {
     const q = v.clone().project(this.camera);

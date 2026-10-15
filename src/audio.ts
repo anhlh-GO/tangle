@@ -45,6 +45,27 @@ function tone(freq: number, dur: number, type: OscillatorType, vol: number, dela
   osc.stop(t + dur + 0.02);
 }
 
+/** Filtered noise whose pitch glides from f0 to f1 (whooshes, rewinds, reels). */
+function sweep(dur: number, vol: number, f0: number, f1: number, delay = 0): void {
+  if (!flags.sound || !ready()) return;
+  const t = ctx!.currentTime + delay;
+  const len = Math.ceil(ctx!.sampleRate * dur);
+  const buf = ctx!.createBuffer(1, len, ctx!.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin((Math.PI * i) / len);
+  const src = ctx!.createBufferSource();
+  src.buffer = buf;
+  const f = ctx!.createBiquadFilter();
+  f.type = 'bandpass';
+  f.Q.value = 2.5;
+  f.frequency.setValueAtTime(f0, t);
+  f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  const g = ctx!.createGain();
+  g.gain.value = vol;
+  src.connect(f).connect(g).connect(master!);
+  src.start(t);
+}
+
 function noise(dur: number, vol: number, freq: number, delay = 0): void {
   if (!flags.sound || !ready()) return;
   const t = ctx!.currentTime + delay;
@@ -88,6 +109,36 @@ export const sfx = {
   tap(): void { tone(900, 0.04, 'sine', 0.08); },
   booster(): void { tone(300, 0.4, 'sine', 0.15, 0, 3); tone(900, 0.25, 'triangle', 0.08, 0.1); },
   win(): void { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.4, 'triangle', 0.15, i * 0.09)); },
+  /** A popup slides in: an airy whoosh up with a soft pop. */
+  popup(): void { sweep(0.22, 0.07, 500, 2600); tone(660, 0.12, 'sine', 0.08, 0.12, 1.3); },
+  /** A popup closes. */
+  close(): void { sweep(0.16, 0.05, 2200, 500); },
+  /** A settings switch flips. */
+  toggle(on: boolean): void { tone(on ? 700 : 520, 0.06, 'square', 0.04); tone(on ? 1050 : 390, 0.08, 'sine', 0.08, 0.05); },
+  /** Three of a colour gather into one ball before they knit. */
+  match(): void { [880, 1175, 1568].forEach((f, i) => tone(f, 0.16, 'sine', 0.09, i * 0.05)); sweep(0.3, 0.05, 800, 3000); },
+  /** A grey mystery strand shows its colour. */
+  reveal(): void { [1320, 1760, 2349].forEach((f, i) => tone(f, 0.18, 'triangle', 0.06, i * 0.04)); },
+  /** The rope winds itself into a ball. */
+  coil(): void { sweep(0.35, 0.05, 400, 1400); },
+  /** The basket is almost full. */
+  alarm(): void { tone(988, 0.09, 'square', 0.05); tone(784, 0.12, 'square', 0.05, 0.11); },
+  /** Undo: a quick rewind. */
+  undo(): void { sweep(0.3, 0.08, 2400, 300); tone(600, 0.22, 'triangle', 0.08, 0.05, 0.5); },
+  /** A booster is picked and waits for a target (scissors). */
+  arm(): void { tone(1200, 0.06, 'square', 0.04); tone(1600, 0.1, 'sine', 0.07, 0.06); },
+  /** The frozen slot cracks a little. */
+  crack(): void { noise(0.06, 0.12, 5200); tone(2600, 0.05, 'triangle', 0.04, 0.01, 0.6); },
+  /** The ice over a slot shatters. */
+  shatter(): void { noise(0.3, 0.16, 6000); [2093, 2637, 3136, 3951].forEach((f, i) => tone(f, 0.18, 'triangle', 0.05, i * 0.04)); },
+  /** A locked strand rattles its padlock. */
+  rattle(): void { for (let k = 0; k < 3; k++) { noise(0.03, 0.1, 3500, k * 0.06); tone(1900, 0.03, 'square', 0.025, k * 0.06); } },
+  /** The key turns and the padlock springs open. */
+  unlock(): void { noise(0.05, 0.1, 3000); tone(1400, 0.05, 'square', 0.05, 0.08); [1047, 1568, 2093].forEach((f, i) => tone(f, 0.25, 'triangle', 0.09, 0.18 + i * 0.07)); },
+  /** The finished toy zooms in and spins. */
+  showcase(): void { sweep(0.6, 0.06, 300, 2400); [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.5, 'sine', 0.06, 0.25 + i * 0.12)); },
+  /** Board zoom step. */
+  zoom(inn: boolean): void { tone(inn ? 900 : 600, 0.05, 'sine', 0.06, 0, inn ? 1.4 : 0.7); },
   lose(): void { [440, 370, 311, 262].forEach((f, i) => tone(f, 0.3, 'triangle', 0.1, i * 0.14)); },
 };
 
@@ -137,7 +188,8 @@ function bell(f: number, delay: number, vol: number, len = 0.7): void {
 let paused = false;
 export function setAudioPaused(p: boolean): void { paused = p; }
 
-export function haptic(ms: number): void {
+/** Vibrate: one pulse (ms) or a pattern [on, off, on…]. */
+export function haptic(ms: number | number[]): void {
   if (flags.haptic && 'vibrate' in navigator) {
     try { navigator.vibrate(ms); } catch { /* not allowed */ }
   }

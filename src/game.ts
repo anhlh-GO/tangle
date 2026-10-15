@@ -25,6 +25,8 @@ import popWinJpg from './assets/pop_win.jpg';
 import popWinA from './assets/pop_win_a.png';
 import popFullJpg from './assets/pop_full.jpg';
 import popFullA from './assets/pop_full_a.png';
+import popIntroJpg from './assets/pop_intro.jpg';
+import popIntroA from './assets/pop_intro_a.png';
 
 /**
  * A cut-out picture shipped small: colour as JPEG + its alpha as a grey PNG, joined into a canvas once
@@ -104,6 +106,7 @@ async function buildPopups(): Promise<void> {
   await Promise.all([
     make(popSettingsJpg, popSettingsA, { settings: [] }, 'settings'),
     make(popWinJpg, popWinA, { win: [WIN_TEXT] }, 'win'),
+    make(popIntroJpg, popIntroA, { intro: [], introBlank: [INTRO_TITLE, INTRO_ART, INTRO_TEXT] }, 'intro'),
     make(popFullJpg, popFullA, {
       full: [FULL_BALLS],
       fullNoSlot: [FULL_BALLS, FULL_SLOT_BTN],
@@ -113,8 +116,8 @@ async function buildPopups(): Promise<void> {
   ]);
 }
 // Boxes are measured on the original reference pictures; each cut-out keeps its crop origin and scale.
-const CUT = { settings: { ox: 60, oy: 94, s: 0.60491 }, win: { ox: 76, oy: 30, s: 0.58554 }, full: { ox: 53, oy: 81, s: 0.57866 } };
-const PIC_CUT: Record<string, keyof typeof CUT> = { settings: 'settings', win: 'win', full: 'full', fullNoSlot: 'full', fullAd: 'full', stuck: 'full' };
+const CUT = { settings: { ox: 60, oy: 94, s: 0.60491 }, win: { ox: 76, oy: 30, s: 0.58554 }, full: { ox: 53, oy: 81, s: 0.57866 }, intro: { ox: 61, oy: 84, s: 0.57762 } };
+const PIC_CUT: Record<string, keyof typeof CUT> = { settings: 'settings', win: 'win', full: 'full', fullNoSlot: 'full', fullAd: 'full', stuck: 'full', intro: 'intro', introBlank: 'intro' };
 const cutBox = (k: keyof typeof CUT, [x0, y0, x1, y1]: Box): Box => {
   const c = CUT[k];
   return [Math.round((x0 - c.ox) * c.s), Math.round((y0 - c.oy) * c.s), Math.round((x1 - c.ox) * c.s), Math.round((y1 - c.oy) * c.s)];
@@ -136,6 +139,11 @@ const FULL_SLOT_IN: Box = [260, 730, 960, 890];
 const FULL_FREE: Box = [490, 830, 615, 888];
 const FULL_SLOT: Box = [205, 712, 1000, 912];
 const FULL_RETRY: Box = [262, 940, 950, 1100];
+// Intro card (the Mystery Yarn reference): title, picture, text box, "Got it!"
+const INTRO_TITLE: Box = [330, 112, 905, 218];
+const INTRO_ART: Box = [150, 296, 1082, 655];
+const INTRO_TEXT: Box = [190, 700, 1035, 850];
+const INTRO_OK: Box = [300, 915, 925, 1090];
 void buildPopups();
 import { adBadge, bubble, button, card, gearButton, inside, pointer, toast, type BoosterKey, type Rect } from './ui';
 
@@ -177,8 +185,8 @@ const B_DESC: Record<BoosterKey, string> = {
 };
 const INTRO = {
   hidden: { title: 'Mystery Yarn', text: 'Grey yarn shows its color once nothing lies on top of it.' },
-  frozen: { title: 'Frozen Slot', text: 'One basket slot is frozen. Every strand you pull melts it by 1. At 0 the slot opens!' },
-  lock: { title: 'Lock & Key', text: 'Strands on the locked peg can\u2019t move. Pull the strand carrying the key to open it!' },
+  frozen: { title: 'Frozen Slot', text: 'A frozen slot! Every strand you pull melts it by 1.' },
+  lock: { title: 'Lock & Key', text: 'Locked peg! Pull the strand with the key to open it.' },
 };
 
 // ---------------------------------------------------------------- state
@@ -319,14 +327,17 @@ function buildBoard(): void {
 
 /** Grey strands show their colour once nothing lies on them. */
 function revealFree(): void {
+  let any = false;
   S.strands.forEach((s, i) => {
     if (!revealed[i] && !S.gone[i] && free(S, i)) {
+      any = true;
       revealed[i] = true;
       scene.setColor(i, YARN[s.c].color);
       const p = scene.toScreen(scene.midOf(i));
       burst(p.x, p.y, '#ffffff', 6, 0.6);
     }
   });
+  if (any) sfx.reveal();
 }
 
 // ---------------------------------------------------------------- level flow
@@ -392,8 +403,13 @@ function play(evs: Ev[]): void {
       const p = scene.toScreen(scene.midOf(e.strand));
       lastPullAt = p;
       // the 3D rope first winds itself into a ball (COIL), then that ball flies to the basket
-      const b: Ball = { c: e.c, x: p.x, y: p.y - L.u * 0.03, x0: p.x, y0: p.y - L.u * 0.03, t: -COIL / 0.45, dur: 0.45, slot: balls.length };
-      balls.push(b);
+      const b: Ball = { c: e.c, x: p.x, y: p.y - L.u * 0.03, x0: p.x, y0: p.y - L.u * 0.03, t: -COIL / 0.45, dur: 0.45, slot: 0 };
+      // the basket keeps colours together: the new ball goes right after its own colour, the rest slide over
+      let at = balls.length;
+      for (let k = balls.length - 1; k >= 0; k--) if (balls[k].c === e.c) { at = k + 1; break; }
+      balls.splice(at, 0, b);
+      balls.forEach((o, k) => { o.slot = k; });
+      sfx.coil();
       busy++;
       delay = 0.5 + COIL;
       void wait(b.dur + COIL).then(() => { if (run === runId) { busy--; sfx.ball(); } });
@@ -405,8 +421,10 @@ function play(evs: Ev[]): void {
       group.sort((a2, b2) => a2.slot - b2.slot);
       group.forEach((b, i) => { b.leaving = { t: -delay, x0: 0, y0: 0, m: 0, u: 0, mx: 0, my: 0, lead: i === 1, group }; });
       leavingBalls.push(...group);
+      // the rest close up at once, while the three merge
       balls = balls.filter((b) => !b.leaving);
       balls.forEach((b, k) => { b.slot = k; });
+      void wait(delay).then(() => { if (run === runId) { sfx.match(); haptic(15); } });
       void wait(delay + MERGE).then(() => {
         if (run !== runId) return;
         const parts = knitToy(c);
@@ -414,7 +432,7 @@ function play(evs: Ev[]): void {
         streak = clock - lastKnit < 3 ? streak + 1 : 1;
         lastKnit = clock;
         sfx.knit(streak);
-        haptic(20);
+        haptic([15, 30, 15]);
         const lead = group[1];
         burst(lead.x, lead.y, YARN[c].color, 16, 1.1);
         floaters.push({ text: streak > 1 ? `Match x${streak}!` : 'Match!', x: lead.x, y: lead.y - L.basket.h * 0.7, t: 0, color: '#fff36b', size: L.u * 0.05 });
@@ -426,10 +444,10 @@ function play(evs: Ev[]): void {
         void wait(0.38).then(() => {
           if (run !== runId) return;
           iceBump = 1;
-          sfx.clack();
+          if (left > 0) sfx.crack();
           if (left === 0) {
             iceBreak = 0;
-            sfx.snip(); haptic(30);
+            sfx.shatter(); haptic([20, 30, 40]);
             const h = holeXY(frozenHole);
             for (let k = 0; k < 22; k++) {
               const a = Math.random() * Math.PI * 2, v = L.u * (0.25 + Math.random() * 0.6);
@@ -441,9 +459,10 @@ function play(evs: Ev[]): void {
       }
     } else if (e.k === 'unlock') {
       scene.setUnlocked(true);
+      sfx.unlock();
       void wait(0.55).then(() => {
         if (run !== runId) return;
-        sfx.booster(); haptic(25);
+        haptic(25);
         const at = scene.lockPoint();
         if (at) { const q = scene.toScreen(at); burst(q.x, q.y, '#ffd34a', 16, 1); floaters.push({ text: 'Unlocked!', x: q.x, y: q.y - L.u * 0.06, t: 0, color: '#fff36b', size: L.u * 0.045 }); }
       });
@@ -590,6 +609,8 @@ function checkEnd(run: number): void {
       await wait(0.35);
       if (run !== runId) return;
       sfx.win();
+      sfx.showcase();
+      haptic([30, 60, 30, 60, 60]);
       for (let k = 0; k < 80; k++) particles.push({ x: L.colX + Math.random() * L.colW, y: -20 - Math.random() * L.H * 0.3, vx: (Math.random() - 0.5) * 80, vy: 120 + Math.random() * 200, life: 0, max: 2.6, color: YARN[k % 8].color, size: L.u * 0.016 });
       show = { t: 0 };
       void wait(SHOW).then(() => {
@@ -601,6 +622,8 @@ function checkEnd(run: number): void {
   } else if (stuck(S)) {
     ended = true;
     popup = { kind: 'stuck', t: 0 };
+    sfx.lose();
+    haptic(60);
   }
 }
 
@@ -609,12 +632,14 @@ function tryPull(i: number): void {
     // say exactly one reason: something on top → chained to a stuck strand → locked peg
     scene.shake(i);
     sfx.nope();
+    haptic(35);
     const p = partner(S, i), chained = p >= 0 && !S.gone[p];
     if (!free(S, i)) {
       for (const j of blockers(S, i)) scene.flash(j);
       showToast('Something lies on top of it!');
     } else if (lockedOn(S, i) || (chained && lockedOn(S, p) && free(S, p))) {
       scene.shakeLock();
+      sfx.rattle();
       const k = S.strands.findIndex((t, j) => t.key && !S.gone[j]);
       if (k >= 0) scene.glow(k);
       showToast('Locked! Pull the strand with the key');
@@ -655,7 +680,7 @@ async function useBooster(k: BoosterKey, gift = false): Promise<void> {
     sfx.booster();
     return;
   }
-  if (k === 'scissors') { armed = 'scissors'; freeSnip = gift; return; }
+  if (k === 'scissors') { armed = 'scissors'; freeSnip = gift; sfx.arm(); haptic(10); return; }
   if (k === 'undo') {
     const h = history.pop();
     if (!h) { showToast('Nothing to undo yet!'); return; }
@@ -667,7 +692,8 @@ async function useBooster(k: BoosterKey, gift = false): Promise<void> {
     knitLog = [];
     scene.resetToy();
     for (const c of redo) knitToy(c, true);
-    balls = S.basket.map((c, i) => { const p = slotXY(i); return { c, x: p.x, y: p.y, x0: p.x, y0: p.y, t: 1, dur: 1, slot: i }; });
+    const order = [...S.basket].sort((a2, b2) => S.basket.indexOf(a2) - S.basket.indexOf(b2));
+    balls = order.map((c, i) => { const p = slotXY(i); return { c, x: p.x, y: p.y, x0: p.x, y0: p.y, t: 1, dur: 1, slot: i }; });
     leavingBalls = [];
     buildBoard();
   } else {
@@ -677,11 +703,14 @@ async function useBooster(k: BoosterKey, gift = false): Promise<void> {
   spend(k);
 }
 let freeSnip = false;
+let lastPopup: Popup | null = null;
+let lastRoom = 9;
 
 function spend(k: BoosterKey): void {
   save.b[k]--;
   persist();
-  sfx.booster();
+  if (k === 'undo') sfx.undo();   // scissors snip and +Slot drill play their own sounds
+  haptic(20);
   try { (FalconSDK as unknown as { analytics?: { turn?: { useBooster?(k: string): void } } }).analytics?.turn?.useBooster?.(k); } catch { /* optional */ }
 }
 
@@ -982,6 +1011,12 @@ function onTap(x: number, y: number): void {
   if (banner.t > 0.3) { banner.t = 0.3; return; }
   if (coach && coach.steps[coach.i].until === 'tap') { coachEvent('tap'); return; }
   if (Math.hypot(x - L.gear.x, y - L.gear.y) < L.gear.r * 1.5) { popup = { kind: 'settings', t: 0 }; sfx.tap(); return; }
+  const zb = zoomButtonAt(x, y);
+  if (zb) {
+    const z0 = scene.zoomLevel, z = zb === 'in' ? Math.min(2, z0 + 0.35) : Math.max(1, z0 - 0.35);
+    if (z !== z0) { scene.setZoom(z); sfx.zoom(zb === 'in'); press.set(`z_${zb}`, 1); } else sfx.nope();
+    return;
+  }
   for (let k = 0; k < BOOSTERS.length; k++) {
     const bp = boosterAt(k);
     if (Math.hypot(x - bp.x, y - bp.y) < L.boostR * 1.25) {
@@ -1047,14 +1082,58 @@ async function popupTap(x: number, y: number): Promise<void> {
       break;
     case 'sound': case 'music': case 'haptic':
       audio.set(hit.id, !audio.get(hit.id));
+      sfx.toggle(audio.get(hit.id));
+      if (hit.id === 'haptic' && audio.get('haptic')) haptic(30);
       break;
   }
 }
 
+// Taps on the board fire on release, so a drag can pan the zoomed board and two fingers can pinch.
+const pointers = new Map<number, { x: number; y: number }>();
+let pinch: { d0: number; z0: number } | null = null;
+let held: { id: number; x0: number; y0: number; x: number; y: number; moved: boolean } | null = null;
+const local = (e: PointerEvent | WheelEvent) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+const spread = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
 canvas.addEventListener('pointerdown', (e) => {
-  const r = canvas.getBoundingClientRect();
-  onTap(e.clientX - r.left, e.clientY - r.top);
+  const p = local(e);
+  pointers.set(e.pointerId, p);
+  if (pointers.size === 2 && !popup && !show) {
+    held = null;
+    pinch = { d0: Math.max(20, spread()), z0: scene.zoomLevel };
+    return;
+  }
+  if (pointers.size > 1) return;
+  if (!popup && !show && scene.inView(p.x, p.y) && !zoomButtonAt(p.x, p.y)) { held = { id: e.pointerId, x0: p.x, y0: p.y, x: p.x, y: p.y, moved: false }; return; }
+  onTap(p.x, p.y);
 });
+canvas.addEventListener('pointermove', (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  const p = local(e);
+  pointers.set(e.pointerId, p);
+  if (pinch && pointers.size >= 2) { scene.setZoom(pinch.z0 * (spread() / pinch.d0)); return; }
+  if (held && held.id === e.pointerId) {
+    if (!held.moved && Math.hypot(p.x - held.x0, p.y - held.y0) > 9 && scene.zoomLevel > 1.01) held.moved = true;
+    if (held.moved) scene.panBy(p.x - held.x, p.y - held.y);
+    held.x = p.x; held.y = p.y;
+  }
+});
+const release = (e: PointerEvent) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (held && held.id === e.pointerId) {
+    const h = held;
+    held = null;
+    if (!h.moved && e.type === 'pointerup') onTap(h.x0, h.y0);
+  }
+};
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('wheel', (e) => {
+  const p = local(e);
+  if (popup || !scene.inView(p.x, p.y)) return;
+  e.preventDefault();
+  scene.setZoom(scene.zoomLevel * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+}, { passive: false });
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && popupButtons[0]) { const b = popupButtons[0].r; onTap(b.x + b.w / 2, b.y + b.h / 2); }
 });
@@ -1065,6 +1144,17 @@ function update(dt: number): void {
   clock += dt;
   updateCut(dt);
   updateDrill(dt);
+  // popup in / out sounds
+  if (popup !== lastPopup) {
+    if (popup && popup.kind !== 'win') sfx.popup();
+    else if (popup?.kind === 'win') sfx.popup();
+    else if (lastPopup) sfx.close();
+    lastPopup = popup;
+  }
+  // one alarm when the basket gets down to its last free slot
+  const left = room(S) - S.basket.length;
+  if (left === 1 && lastRoom !== 1 && !ended && S.basket.length > 0) { sfx.alarm(); haptic([20, 40, 20]); }
+  lastRoom = left;
   if (show) { show.t += dt; if (show.t >= SHOW) show = null; }
   iceBump = Math.max(0, iceBump - dt * 4);
   if (iceBreak >= 0) { iceBreak += dt; if (iceBreak > 0.6) iceBreak = -1; }
@@ -1358,6 +1448,50 @@ function boosterArt(k: BoosterKey, x: number, y: number, r: number, count: numbe
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- board zoom buttons
+
+function zoomButtons(): { id: 'in' | 'out'; x: number; y: number; r: number }[] {
+  const r = L.u * 0.048, x = L.colX + L.colW * 0.935;
+  return [{ id: 'in', x, y: L.viewTop + r * 1.25, r }, { id: 'out', x, y: L.viewTop + r * 3.75, r }];
+}
+function zoomButtonAt(x: number, y: number): 'in' | 'out' | null {
+  if (!L) return null;
+  for (const b of zoomButtons()) if (Math.hypot(x - b.x, y - b.y) < b.r * 1.3) return b.id;
+  return null;
+}
+/** Round glossy blue buttons (booster style) with a magnifier and +/−; dimmed at the limit. */
+function drawZoomButtons(): void {
+  for (const b of zoomButtons()) {
+    const at = b.id === 'in' ? scene.zoomLevel >= 1.99 : scene.zoomLevel <= 1.01;
+    const s = 1 - 0.1 * (press.get(`z_${b.id}`) ?? 0);
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.scale(s, s);
+    ctx.globalAlpha = at ? 0.45 : 1;
+    ctx.fillStyle = 'rgba(15,20,70,0.3)';
+    ctx.beginPath(); ctx.arc(0, b.r * 0.12, b.r * 1.02, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1c2f9e';
+    ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createLinearGradient(0, -b.r, 0, b.r);
+    g.addColorStop(0, '#5fb4ff'); g.addColorStop(1, '#1d6fe6');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, b.r * 0.82, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.beginPath(); ctx.ellipse(-b.r * 0.1, -b.r * 0.42, b.r * 0.5, b.r * 0.2, -0.2, 0, Math.PI * 2); ctx.fill();
+    // magnifier
+    ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round';
+    ctx.lineWidth = b.r * 0.16;
+    ctx.beginPath(); ctx.arc(-b.r * 0.08, -b.r * 0.08, b.r * 0.36, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = b.r * 0.2;
+    ctx.beginPath(); ctx.moveTo(b.r * 0.18, b.r * 0.18); ctx.lineTo(b.r * 0.46, b.r * 0.46); ctx.stroke();
+    ctx.lineWidth = b.r * 0.12;
+    ctx.beginPath(); ctx.moveTo(-b.r * 0.26, -b.r * 0.08); ctx.lineTo(b.r * 0.1, -b.r * 0.08);
+    if (b.id === 'in') { ctx.moveTo(-b.r * 0.08, -b.r * 0.26); ctx.lineTo(-b.r * 0.08, b.r * 0.1); }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function drawBoosters(): void {
   // no toolbar panel: just the three buttons on the background
   BOOSTERS.forEach((k, i) => {
@@ -1418,6 +1552,27 @@ function hotspot(id: string, r: Rect, round = false): void {
     ctx.fill();
   }
   popupButtons.push({ id, r });
+}
+/** Plain bold text wrapped into a box, centred, shrinking until it fits. */
+function wrapText(text: string, r: Rect, size: number, color: string): void {
+  let sz = size, lines: string[] = [];
+  for (let k = 0; k < 8; k++) {
+    ctx.font = `${sz}px ${FONT}`;
+    lines = [];
+    let line = '';
+    for (const w of text.split(' ')) {
+      const t = line ? `${line} ${w}` : w;
+      if (ctx.measureText(t).width > r.w * 0.94 && line) { lines.push(line); line = w; } else line = t;
+    }
+    if (line) lines.push(line);
+    if (lines.length * sz * 1.22 <= r.h * 0.92) break;
+    sz *= 0.9;
+  }
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const y0 = r.y + r.h / 2 - ((lines.length - 1) * sz * 1.22) / 2;
+  lines.forEach((l, i) => ctx.fillText(l, r.x + r.w / 2, y0 + i * sz * 1.22));
 }
 /** Text shrunk to fit `maxW`. */
 function fitText(text: string, x: number, y: number, size: number, maxW: number, fill: string, stroke: string): void {
@@ -1514,19 +1669,22 @@ function drawPopup(): void {
       hotspot('close', boxAt(P, [SET_X.x - SET_X.r, SET_X.y - SET_X.r, SET_X.x + SET_X.r, SET_X.y + SET_X.r]), true);
     }
   } else if (p.kind === 'intro') {
-    const r = popupRect(0.95);
-    if (p.booster) {
-      card(ctx, r, 'New Booster!');
-      boosterArt(p.booster, cx, r.y + r.h * 0.3, r.w * 0.15, save.b[p.booster], 0, 0, Math.sin(clock * 4), false);
-      bubble(ctx, B_DESC[p.booster], cx, r.y + r.h * 0.64, r.w * 0.85, r.w * 0.05, 1);
-    } else if (p.blocker) {
-      const info = INTRO[p.blocker];
-      card(ctx, r, info.title);
-      ctx.lineCap = 'round';
-      introArt(p.blocker, cx, r.y + r.h * 0.33, r.w);
-      bubble(ctx, info.text, cx, r.y + r.h * 0.64, r.w * 0.85, r.w * 0.046, 1);
+    // the Mystery Yarn card is the reference picture as it is; the others reuse its frame
+    const asIs = p.blocker === 'hidden';
+    const P = popupPic(asIs ? 'intro' : 'introBlank', 0.9);
+    if (P) {
+      drawPic(P);
+      if (!asIs) {
+        const title = p.booster ? 'New Booster!' : p.blocker ? INTRO[p.blocker].title : '';
+        fitText(title, cx, atY(P, 165), 92 * P.k, 540 * P.k, '#ffffff', '#0b2563');
+        const art = boxAt(P, INTRO_ART);
+        if (p.booster) boosterArt(p.booster, cx, art.y + art.h * 0.46, art.h * 0.36, save.b[p.booster], 0, 0, Math.sin(clock * 4), false);
+        else if (p.blocker) introArt(p.blocker, cx, art.y + art.h * 0.5, art.w * 1.3);
+        const text = p.booster ? B_DESC[p.booster] : p.blocker ? INTRO[p.blocker].text : '';
+        wrapText(text, boxAt(P, INTRO_TEXT), 50 * P.k, '#14296b');
+      }
+      hotspot('close', boxAt(P, INTRO_OK));
     }
-    addButton('close', { x: cx - r.w * 0.25, y: r.y + r.h * 0.8, w: r.w * 0.5, h: r.w * 0.13 }, 'Got it!', 'green');
   }
   ctx.restore();
 }
@@ -1613,6 +1771,7 @@ function draw(): void {
   drawHud();
   drawDrill();
   drawBoosters();
+  drawZoomButtons();
   ctx.globalAlpha = 1;
   drawShowcase(sr.k);
   drawParticles();
