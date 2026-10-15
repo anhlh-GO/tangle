@@ -678,7 +678,7 @@ export class Scene3D {
     for (const x of [-W / 2 - fo, W / 2 + fo]) {
       this.fit.push(new THREE.Vector3(x, 0, -D / 2 - fo), new THREE.Vector3(x, -0.42, D / 2 + fo));
     }
-    for (const p of [0, cols - 1]) this.fit.push(this.pegPos(p, pegH + 0.34));
+    for (const p of [0, cols - 1]) this.fit.push(this.pegPos(p, pegH + 0.22));
     this.target.set(0, 0, 0);
   }
 
@@ -857,7 +857,7 @@ export class Scene3D {
 
   private place(): void {
     // like the reference board: seen from above and in front, its thick front edge showing
-    const tilt = (60 * Math.PI) / 180;
+    const tilt = (68 * Math.PI) / 180;
     const dir = new THREE.Vector3(0, Math.sin(tilt), Math.cos(tilt));
     this.camera.zoom = 1;   // fit the whole board first; the player's zoom goes on top
     this.camera.clearViewOffset();

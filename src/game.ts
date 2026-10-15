@@ -291,9 +291,9 @@ function layout(): Layout {
   const toy = { x: colX + colW * 0.12, y: 0.1 * H + dy, w: colW * 0.76, h: 0.21 * H };
   const bw = colW * 0.86, bh = bw * TRAY_AR;
   const basket = { x: colX + (colW - bw) / 2, y: 0.36 * H + dy - bh / 2, w: bw, h: bh };
-  const viewTop = 0.42 * H + dy;
+  const viewTop = 0.395 * H + dy;
   const boostR = Math.min(colW * 0.085, 0.042 * H);
-  const viewBottom = Math.min(0.845 * H + dy, boostY - boostR * 1.55);
+  const viewBottom = Math.min(0.87 * H + dy, boostY - boostR * 1.3);
   return {
     W, H, colX, colW, u, hudY,
     gear: { x: colX + colW * 0.11, y: hudY - 0.003 * H, r: colW * 0.062 },
@@ -313,7 +313,7 @@ function layout(): Layout {
 function placeBasket(): void {
   const t = scene.boardTop;
   if (!t || t.x1 - t.x0 < 10) return;
-  const tw = t.x1 - t.x0, w = Math.min(tw * 1.08, L.colW * 0.86), h = w * TRAY_AR, cx = (t.x0 + t.x1) / 2;
+  const tw = t.x1 - t.x0, w = Math.min(tw * 1.02, L.colW * 0.88), h = w * TRAY_AR, cx = (t.x0 + t.x1) / 2;
   L.basket = { x: cx - w / 2, y: t.y - tw * 0.06 - h, w, h };
   L.toy.h = Math.max(L.H * 0.12, L.basket.y - L.H * 0.01 - L.toy.y);
 }
@@ -1703,8 +1703,9 @@ function boosterArt(k: BoosterKey, x: number, y: number, r: number, count: numbe
 // ---------------------------------------------------------------- board zoom buttons
 
 function zoomButtons(): { id: 'in' | 'out'; x: number; y: number; r: number }[] {
-  const r = L.u * 0.05, x = L.colX + L.colW * 0.935;
-  return [{ id: 'in', x, y: L.viewTop + r * 1.3, r }, { id: 'out', x, y: L.viewTop + r * 3.9, r }];
+  // the board now spans the screen, so the zoom pair sits at the right of the toy, above the tray
+  const r = L.u * 0.045, x = L.colX + L.colW * 0.92, yb = L.basket.y - r * 1.5;
+  return [{ id: 'in', x, y: yb - r * 2.5, r }, { id: 'out', x, y: yb, r }];
 }
 function zoomButtonAt(x: number, y: number): 'in' | 'out' | null {
   if (!L) return null;
@@ -2110,7 +2111,7 @@ function draw(): void {
   }
   L = layout();
   placeBasket();
-  scene.setView(L.colX + L.colW * 0.05, L.viewTop, L.colW * 0.9, L.viewBottom - L.viewTop, cw, ch, dpr);
+  scene.setView(L.colX + L.colW * 0.03, L.viewTop, L.colW * 0.94, L.viewBottom - L.viewTop, cw, ch, dpr);
   const sr = showRect();
   scene.setToyView(sr.x, sr.y, sr.w, sr.h);
   scene.showcase(sr.k, showSpin());
