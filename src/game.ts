@@ -60,7 +60,7 @@ function maskedImage(jpg: string, mask: string, then?: (c: HTMLCanvasElement) =>
   return out;
 }
 const trayImg = maskedImage(trayJpg, trayA);
-const TRAY_AR = 180 / 1085;  // tray picture height / width
+const TRAY_AR = 195 / 1122;  // tray picture height / width
 const gearImg = maskedImage(gearJpg, gearA);
 
 // ---------------------------------------------------------------- popup pictures
@@ -307,6 +307,19 @@ function layout(): Layout {
 }
 
 /** The boosters, side by side on the bottom toolbar. */
+/**
+ * As in the reference: the basket is 88% as wide as the board's far frame edge and sits just above it
+ * (gap 3.8% of that width); the toy gets the room above. Uses the board's unzoomed position from the
+ * last frame (layout() alone until the board has been drawn once).
+ */
+function placeBasket(): void {
+  const t = scene.boardTop;
+  if (!t || t.x1 - t.x0 < 10) return;
+  const tw = t.x1 - t.x0, w = tw * 0.88, h = w * TRAY_AR, cx = (t.x0 + t.x1) / 2;
+  L.basket = { x: cx - w / 2, y: t.y - tw * 0.038 - h, w, h };
+  L.toy.h = Math.max(L.H * 0.12, L.basket.y - L.H * 0.01 - L.toy.y);
+}
+
 function boosterAt(i: number): { x: number; y: number } {
   return { x: L.colX + L.colW * (0.21 + i * 0.29), y: L.boostY };
 }
@@ -314,7 +327,7 @@ function boosterAt(i: number): { x: number; y: number } {
 function holeXY(k: number): { x: number; y: number; r: number } {
   // hole centres measured on the tray picture (src/assets/tray.png)
   const b = L.basket;
-  return { x: b.x + b.w * (0.0866 + k * 0.1613), y: b.y + b.h * 0.403, r: b.w * 0.064 };
+  return { x: b.x + b.w * (0.0914 + k * 0.1623), y: b.y + b.h * 0.428, r: b.w * 0.066 };
 }
 /** Where the k-th ball sits: the k-th hole, skipping the frozen one while it is iced over. */
 function slotXY(k: number): { x: number; y: number; r: number } {
@@ -398,6 +411,7 @@ function startLevel(index: number): void {
   floaters = [];
   streak = 0;
   L = layout();
+  placeBasket();
   buildBoard();
   revealFree();
   const d = diffOf(level);
@@ -1992,6 +2006,7 @@ function draw(): void {
     canvas.height = Math.round(ch * dpr);
   }
   L = layout();
+  placeBasket();
   scene.setView(L.colX + L.colW * 0.05, L.viewTop, L.colW * 0.9, L.viewBottom - L.viewTop, cw, ch, dpr);
   const sr = showRect();
   scene.setToyView(sr.x, sr.y, sr.w, sr.h);

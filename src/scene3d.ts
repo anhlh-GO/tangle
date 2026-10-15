@@ -217,6 +217,9 @@ export class Scene3D {
   static readonly ZOOM_MIN = 1;
   static readonly ZOOM_MAX = 2;
   private pegH = 0.8;
+  private frameOut = 0.3;
+  /** Screen position of the board's far frame edge (unzoomed), filled each frame. */
+  boardTop: { x0: number; x1: number; y: number } | null = null;
   private lockFx: { pad: THREE.Group; shackle: THREE.Mesh; key: THREE.Group | null; keyHome: THREE.Vector3; at: THREE.Vector3; t: number; open: boolean; shake: number; strands: number[] } | null = null;
   private mysteryTex = mysteryTexture();
   cols = 4;
@@ -484,12 +487,12 @@ export class Scene3D {
     this.lockFx = null;
     Object.assign(this.zoom, { cur: 1, to: 1, px: 0, pz: 0, tx: 0, tz: 0 });
     // the panel reaches about half a peg-gap past the outer pegs, as in the reference
-    const W = (cols - 1) * SP + 1.06, D = (rows - 1) * SP + 1.06;
+    const W = (cols - 1) * SP + 1.04, D = (rows - 1) * SP + 1.24;
     this.zoom.w = W; this.zoom.d = D;
     const top = Math.max(1, ...depth);
     // many layers: squeeze them so the pegs stay short, as in the reference
-    const step = Math.min(STEP, 0.75 / top);
-    const pegH = Math.max(1.12, 0.25 + top * step + 0.3);   // tall pegs, as in the reference
+    const step = Math.min(0.085, 0.5 / top);
+    const pegH = Math.max(0.62, 0.22 + top * step + 0.16);   // short pegs, as in the reference
     this.pegH = pegH;
     // as in the reference: a bright honey-maple panel with a soft light edge, sitting on a thin
     // round-cornered frame of darker wood whose front edge shows, on a darker foot
@@ -542,7 +545,7 @@ export class Scene3D {
       this.board.add(peg, n, head, hole, lip);
     }
     strands.forEach((s, i) => {
-      const h = 0.25 + depth[i] * step;
+      const h = 0.2 + depth[i] * step;
       const a = this.pegPos(s.a, h), b = this.pegPos(s.b, h);
       const dir = b.clone().sub(a).normalize();
       // wrap a little around each peg
@@ -648,6 +651,7 @@ export class Scene3D {
     // what must be on screen: the board's rim and the tops of the far pegs
     this.fit = [];
     const fo = 0.28 + 0.02;
+    this.frameOut = 0.28;
     for (const x of [-W / 2 - fo, W / 2 + fo]) {
       this.fit.push(new THREE.Vector3(x, 0, -D / 2 - fo), new THREE.Vector3(x, -0.43, D / 2 + fo));
     }
@@ -830,7 +834,7 @@ export class Scene3D {
 
   private place(): void {
     // like the reference board: seen from above and in front, its thick front edge showing
-    const tilt = (63 * Math.PI) / 180;
+    const tilt = (60 * Math.PI) / 180;
     const dir = new THREE.Vector3(0, Math.sin(tilt), Math.cos(tilt));
     this.camera.zoom = 1;   // fit the whole board first; the player's zoom goes on top
     this.camera.clearViewOffset();
@@ -859,6 +863,15 @@ export class Scene3D {
     const { w, h } = this.view;
     // centred left-right; the board's far edge sits right under the basket, as in the reference
     this.camera.setViewOffset(w, h, (((b.x0 + b.x1) / 2) * w) / 2, ((0.985 - b.y1) * h) / 2, w, h);
+    this.camera.zoom = 1;
+    this.camera.updateProjectionMatrix();
+    // where the board's far (top) frame edge lands on screen at 1× zoom — the basket sits right above it
+    {
+      const fo = this.frameOut, y = -0.02;
+      const l = this.toScreen(new THREE.Vector3(-this.zoom.w / 2 - fo, y, -this.zoom.d / 2 - fo));
+      const r = this.toScreen(new THREE.Vector3(this.zoom.w / 2 + fo, y, -this.zoom.d / 2 - fo));
+      this.boardTop = { x0: l.x, x1: r.x, y: Math.min(l.y, r.y) };
+    }
     // the player's zoom + pan on top of the fit
     const z = this.zoom;
     z.cur += (z.to - z.cur) * 0.25;
