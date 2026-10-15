@@ -60,7 +60,7 @@ function maskedImage(jpg: string, mask: string, then?: (c: HTMLCanvasElement) =>
   return out;
 }
 const trayImg = maskedImage(trayJpg, trayA);
-const TRAY_AR = 173 / 900;   // tray picture height / width
+const TRAY_AR = 180 / 1085;  // tray picture height / width
 const gearImg = maskedImage(gearJpg, gearA);
 
 // ---------------------------------------------------------------- popup pictures
@@ -314,7 +314,7 @@ function boosterAt(i: number): { x: number; y: number } {
 function holeXY(k: number): { x: number; y: number; r: number } {
   // hole centres measured on the tray picture (src/assets/tray.png)
   const b = L.basket;
-  return { x: b.x + b.w * (0.1006 + k * 0.1602), y: b.y + b.h * 0.4133, r: b.w * 0.063 };
+  return { x: b.x + b.w * (0.0866 + k * 0.1613), y: b.y + b.h * 0.403, r: b.w * 0.064 };
 }
 /** Where the k-th ball sits: the k-th hole, skipping the frozen one while it is iced over. */
 function slotXY(k: number): { x: number; y: number; r: number } {
@@ -1547,7 +1547,7 @@ function drawHud(): void {
     // not open yet: a darker hole with a cream padlock, as in the reference (+Slot opens it)
     const s2 = holeXY(k2);
     ctx.fillStyle = 'rgba(55,22,6,0.4)';
-    ctx.beginPath(); ctx.ellipse(s2.x, s2.y, s2.r * 1.04, s2.r * 0.88, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(s2.x, s2.y, s2.r * 1.04, s2.r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
     padlock2d(s2.x + s2.r * 0.02, s2.y + s2.r * 0.06, s2.r * 0.62);
   }
   drawFrozenSlot();

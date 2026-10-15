@@ -72,15 +72,15 @@ function woodTexture(): THREE.CanvasTexture {
   c.width = 512; c.height = 512;
   const g = c.getContext('2d')!;
   const base = g.createLinearGradient(0, 0, 512, 512);
-  base.addColorStop(0, '#fcba62');
-  base.addColorStop(1, '#f6ae56');
+  base.addColorStop(0, '#efbe82');
+  base.addColorStop(1, '#eab77b');
   g.fillStyle = base;
   g.fillRect(0, 0, 512, 512);
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let k = 0; k < 70; k++) {
     const y = rnd() * 512, amp = 1 + rnd() * 4, ph = rnd() * 6;
-    g.strokeStyle = rnd() < 0.5 ? `rgba(214,128,48,${0.08 + rnd() * 0.1})` : `rgba(255,214,150,${0.1 + rnd() * 0.14})`;
+    g.strokeStyle = rnd() < 0.5 ? `rgba(214,128,48,${0.03 + rnd() * 0.04})` : `rgba(255,224,170,${0.04 + rnd() * 0.05})`;
     g.lineWidth = 1 + rnd() * 2.5;
     g.beginPath();
     for (let x = 0; x <= 512; x += 16) {
@@ -494,21 +494,24 @@ export class Scene3D {
     // as in the reference: a bright honey-maple panel with a soft light edge, sitting on a thin
     // round-cornered frame of darker wood whose front edge shows, on a darker foot
     const tex = woodTexture();
-    const FR = 0.2;                                   // frame margin round the panel
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xbe6c2e, roughness: 0.45 });
+    const FR = 0.28;                                  // frame margin round the panel
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xd08250, roughness: 0.45 });
     const frame = new THREE.Mesh(new RoundedBoxGeometry(W + FR * 2, 0.3, D + FR * 2, 5, 0.13), frameMat);
     frame.position.y = -0.17;
     frame.castShadow = true;
     frame.receiveShadow = true;
-    const foot = new THREE.Mesh(new RoundedBoxGeometry(W + FR * 2 - 0.06, 0.14, D + FR * 2 - 0.06, 4, 0.06), new THREE.MeshStandardMaterial({ color: 0x7a3d17, roughness: 0.6 }));
+    const foot = new THREE.Mesh(new RoundedBoxGeometry(W + FR * 2 - 0.06, 0.14, D + FR * 2 - 0.06, 4, 0.06), new THREE.MeshStandardMaterial({ color: 0x7a3a1a, roughness: 0.6 }));
     foot.position.y = -0.36;
-    const topMat = new THREE.MeshStandardMaterial({ color: 0xf0d8b8, map: tex, roughness: 0.55 });
-    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfbc777, roughness: 0.45 });
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.6 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfae3b3, roughness: 0.45 });
     // the panel: a thin slab with a rounded light edge (side material) and the wood on top
     const panel = new THREE.Mesh(new RoundedBoxGeometry(W, 0.1, D, 4, 0.045), [edgeMat, edgeMat, topMat, edgeMat, edgeMat, edgeMat]);
     panel.position.y = -0.02;
     panel.receiveShadow = true;
-    this.board.add(foot, frame, panel);
+    // the dark groove where the panel meets the frame
+    const groove = new THREE.Mesh(new RoundedBoxGeometry(W + 0.07, 0.08, D + 0.07, 3, 0.05), new THREE.MeshStandardMaterial({ color: 0x73310f, roughness: 0.8 }));
+    groove.position.y = -0.03;
+    this.board.add(foot, frame, groove, panel);
     // cream pegs: a slim stem with a round knob, standing in a dark carved hole
     const pegMat = new THREE.MeshStandardMaterial({ color: 0xf3e4c8, roughness: 0.4 });
     const headMat = new THREE.MeshStandardMaterial({ color: 0xf8ecd6, roughness: 0.32 });
@@ -644,7 +647,7 @@ export class Scene3D {
     }
     // what must be on screen: the board's rim and the tops of the far pegs
     this.fit = [];
-    const fo = 0.2 + 0.02;
+    const fo = 0.28 + 0.02;
     for (const x of [-W / 2 - fo, W / 2 + fo]) {
       this.fit.push(new THREE.Vector3(x, 0, -D / 2 - fo), new THREE.Vector3(x, -0.43, D / 2 + fo));
     }
