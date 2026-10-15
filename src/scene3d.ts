@@ -505,7 +505,7 @@ export class Scene3D {
       sh.lineTo(-w / 2, -d / 2 + r); sh.quadraticCurveTo(-w / 2, -d / 2, -w / 2 + r, -d / 2);
       return sh;
     };
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xab5428, roughness: 0.42 });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xc4693a, roughness: 0.38 });
     const sideMat = new THREE.MeshStandardMaterial({ color: 0x652a0d, roughness: 0.55 });
     // the frame: a rounded ring, bevelled so its top is soft
     const ring = rr(OW - 0.12, OD - 0.12, 0.5);
@@ -529,7 +529,7 @@ export class Scene3D {
     const lip = new THREE.Mesh(new THREE.ShapeGeometry(rr(PW - 0.02, PD - 0.02, 0.18), 12), new THREE.MeshStandardMaterial({ color: 0xfac68a, roughness: 0.55 }));
     lip.rotation.x = -Math.PI / 2;
     lip.position.y = -0.012;
-    const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.62 });
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xf2e2cf, map: tex, roughness: 0.62 });
     const panel = new THREE.Mesh(new THREE.ShapeGeometry(rr(PW - 0.12, PD - 0.12, 0.13), 12), topMat);
     panel.rotation.x = -Math.PI / 2;
     panel.position.y = -0.006;

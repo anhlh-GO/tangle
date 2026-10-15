@@ -60,7 +60,7 @@ function maskedImage(jpg: string, mask: string, then?: (c: HTMLCanvasElement) =>
   return out;
 }
 const trayImg = maskedImage(trayJpg, trayA);
-const TRAY_AR = 129 / 720;   // tray.png height / width
+const TRAY_AR = 173 / 900;   // tray picture height / width
 const gearImg = maskedImage(gearJpg, gearA);
 
 // ---------------------------------------------------------------- popup pictures
@@ -314,7 +314,7 @@ function boosterAt(i: number): { x: number; y: number } {
 function holeXY(k: number): { x: number; y: number; r: number } {
   // hole centres measured on the tray picture (src/assets/tray.png)
   const b = L.basket;
-  return { x: b.x + b.w * (0.0944 + k * 0.1614), y: b.y + b.h * 0.43, r: b.w * 0.06 };
+  return { x: b.x + b.w * (0.1006 + k * 0.1602), y: b.y + b.h * 0.4133, r: b.w * 0.063 };
 }
 /** Where the k-th ball sits: the k-th hole, skipping the frozen one while it is iced over. */
 function slotXY(k: number): { x: number; y: number; r: number } {
@@ -842,6 +842,31 @@ function drawCut(): void {
 // ---------------------------------------------------------------- frozen slot
 
 /** The iced-over basket hole: a chunky ice block with the pulls still needed, cracking as it melts. */
+/** The small cream padlock of the locked basket holes (centre x, y; body width w). */
+function padlock2d(x: number, y: number, w: number): void {
+  const bh = w * 0.82, by = y - bh * 0.25;
+  ctx.save();
+  // shackle
+  ctx.strokeStyle = '#e9e1da';
+  ctx.lineWidth = w * 0.17;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(x, by, w * 0.29, Math.PI, 0); ctx.lineTo(x + w * 0.29, by + w * 0.08); ctx.moveTo(x - w * 0.29, by); ctx.lineTo(x - w * 0.29, by + w * 0.08); ctx.stroke();
+  // body with a soft shadow and a light top
+  ctx.fillStyle = 'rgba(40,15,0,0.35)';
+  roundRect(ctx, x - w / 2 + w * 0.04, by + w * 0.06, w, bh, w * 0.18);
+  ctx.fill();
+  const g = ctx.createLinearGradient(0, by, 0, by + bh);
+  g.addColorStop(0, '#fbf7f3'); g.addColorStop(1, '#ddd4cc');
+  ctx.fillStyle = g;
+  roundRect(ctx, x - w / 2, by, w, bh, w * 0.18);
+  ctx.fill();
+  // keyhole
+  ctx.fillStyle = '#5a3a28';
+  ctx.beginPath(); ctx.arc(x, by + bh * 0.42, w * 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - w * 0.05, by + bh * 0.45); ctx.lineTo(x + w * 0.05, by + bh * 0.45); ctx.lineTo(x + w * 0.035, by + bh * 0.72); ctx.lineTo(x - w * 0.035, by + bh * 0.72); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
 function drawFrozenSlot(): void {
   if (frozenHole < 0) return;
   const h = holeXY(frozenHole);
@@ -1519,17 +1544,11 @@ function drawHud(): void {
   if (trayImg.ok) ctx.drawImage(trayImg.c, bk.x, bk.y, bk.w, bk.h);
   for (let k2 = 0; k2 < HOLES; k2++) {
     if (!holeLocked(k2)) continue;
-    // not open yet: a dimmed hole with a little lock (+Slot opens it)
+    // not open yet: a darker hole with a cream padlock, as in the reference (+Slot opens it)
     const s2 = holeXY(k2);
-    ctx.fillStyle = 'rgba(60,30,10,0.35)';
-    ctx.beginPath(); ctx.ellipse(s2.x, s2.y, s2.r * 1.05, s2.r * 0.92, 0, 0, Math.PI * 2); ctx.fill();
-    const lr = s2.r * 0.42;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    roundRect(ctx, s2.x - lr * 0.75, s2.y - lr * 0.25, lr * 1.5, lr * 1.15, lr * 0.25);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = lr * 0.28;
-    ctx.beginPath(); ctx.arc(s2.x, s2.y - lr * 0.25, lr * 0.45, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = 'rgba(55,22,6,0.4)';
+    ctx.beginPath(); ctx.ellipse(s2.x, s2.y, s2.r * 1.04, s2.r * 0.88, 0, 0, Math.PI * 2); ctx.fill();
+    padlock2d(s2.x + s2.r * 0.02, s2.y + s2.r * 0.06, s2.r * 0.62);
   }
   drawFrozenSlot();
   if (lastBlink >= 0 && S.basket.length < room(S)) {
