@@ -51,6 +51,13 @@ function onShell(k: Kit, part: number, geo: THREE.BufferGeometry, c: V3, R: V3, 
 /** A smooth tube through points (trunks, tails, trims, necklaces). */
 const tube = (pts: V3[], r: number, seg = 48, closed = false) =>
   new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), closed), seg, r, 12, closed);
+/** Partial spheres / cones squash the stitch texture: stretch the UVs back (su, sv = covered fraction). */
+function uvFix<T extends THREE.BufferGeometry>(g: T, su: number, sv: number): T {
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+  uv.needsUpdate = true;
+  return g;
+}
 /** Upper half of a sphere (hats, domes). */
 const dome = (r: number) => new THREE.SphereGeometry(r, 32, 14, 0, PI * 2, 0, PI / 2);
 /** A wide arch (fender / wheel arch): a half torus stretched across its axis. */
@@ -120,7 +127,7 @@ export const TOYS_E: Build[] = [
   // 41 Panda: sitting in a sweater, nibbling bamboo, beanie on
   (k) => {
     const head = k.part(0), marks = k.part(4), muzzle = k.part(2), sweater = k.part(1), rib = k.part(7),
-      arms = k.part(4), legs = k.part(4), bamboo = k.part(3), hat = k.part(5), trim = k.part(6);
+      arms = k.part(4), legs = k.part(4), bamboo = k.part(3), hat = k.part(5), trim = k.part(7);
     k.add(sweater, sph(0.72), 0, 0.82, 0, 3, 0, 0, 0, 1, 1, 0.9);
     k.add(rib, tor(0.6, 0.085), 0, 0.42, 0, 2, PI / 2, 0, 0, 1, 0.9, 1);
     k.add(rib, tor(0.37, 0.09), 0, 1.43, 0.02, 2, PI / 2, 0, 0, 1, 0.92, 1);
@@ -128,8 +135,8 @@ export const TOYS_E: Build[] = [
     // sitting legs with pink paw pads
     for (const s of [-1, 1]) {
       stick(k, legs, 0.2, [s * 0.36, 0.3, 0.2], [s * 0.42, 0.26, 0.62]);
-      k.deco(sph(0.12), 0xff9db5, s * 0.43, 0.25, 0.84, 0.6, 0, 0, 0, 1, 1, 0.35);
-      for (const t of [-1, 0, 1]) k.deco(sph(0.042), 0xff9db5, s * 0.43 + t * 0.085, 0.4 - Math.abs(t) * 0.025, 0.8, 0.6, 0, 0, 0, 1, 1, 0.5);
+      k.add(muzzle, sph(0.16), s * 0.43, 0.26, 0.82, 1, 0, 0, 0, 1, 1, 0.4);
+      for (const t of [-1, 0, 1]) k.deco(sph(0.042), 0xff9db5, s * 0.43 + t * 0.085, 0.3 - Math.abs(t) * 0.025, 0.88, 0.6, 0, 0, 0, 1, 1, 0.5);
       // arms with ribbed cuffs and round paws
       const a: V3 = [s * 0.58, 1.2, 0.05], b: V3 = [s * 0.36, 0.92, 0.55];
       stick(k, arms, 0.15, a, b);
@@ -167,8 +174,8 @@ export const TOYS_E: Build[] = [
   },
   // 42 Fox: sitting with a huge fluffy tail, a scarf and a leaf on its head
   (k) => {
-    const body = k.part(5), chest = k.part(0), head = k.part(5), muzzle = k.part(0), ears = k.part(6),
-      legs = k.part(4), tail = k.part(6), tip = k.part(0), scarf = k.part(1), leaf = k.part(3);
+    const body = k.part(6), chest = k.part(0), head = k.part(5), muzzle = k.part(0), ears = k.part(6),
+      legs = k.part(4), tail = k.part(5), tip = k.part(0), scarf = k.part(1), leaf = k.part(3);
     k.add(body, sph(0.68), 0, 0.82, -0.05, 3, 0, 0, 0, 1, 1.05, 0.92);
     for (const s of [-1, 1]) k.add(body, sph(0.3), s * 0.42, 0.32, -0.05, 1, 0, 0, 0, 1, 0.9, 1.3);
     k.add(chest, sph(0.42), 0, 0.95, 0.42, 2, 0, 0, 0, 0.95, 1.25, 0.55);
@@ -191,10 +198,13 @@ export const TOYS_E: Build[] = [
     eyes(k, 0, 1.94, 0.62, 0.22, 0.075);
     cheeks(k, 0, 1.75, 0.6, 0.42, 0.065);
     // big bushy tail curling up the right side, white tip
-    for (const [x, y, z, r] of [[0.35, 0.3, -0.6, 0.2], [0.68, 0.42, -0.8, 0.27], [0.98, 0.74, -0.76, 0.32], [1.12, 1.12, -0.52, 0.3]] as const) {
-      k.add(tail, sph(r), x, y, z, 1);
+    const tc = new THREE.CatmullRomCurve3([[0.3, 0.3, -0.55], [0.7, 0.36, -0.82], [1.02, 0.72, -0.78], [1.14, 1.12, -0.52], [1.06, 1.42, -0.28]].map((p) => new THREE.Vector3(...p)));
+    for (let i = 0; i < 7; i++) {
+      const t = i / 7, p = tc.getPoint(t), r = 0.17 + Math.sin(Math.min(1, t * 1.25) * PI * 0.62) * 0.16;
+      k.add(tail, sph(r), p.x, p.y, p.z, 1);
     }
-    k.add(tip, sph(0.25), 1.08, 1.46, -0.3, 1, 0.5, 0, 0.3, 1, 1.15, 1);
+    const tq = tc.getPoint(1);
+    k.add(tip, sph(0.25), tq.x, tq.y, tq.z, 1, 0.5, 0, 0.3, 1, 1.15, 1);
     // knitted scarf with a knot and fringe
     k.add(scarf, tor(0.38, 0.11), 0, 1.38, 0.05, 2, PI / 2 - 0.15);
     k.add(scarf, sph(0.12), 0.24, 1.32, 0.42, 1);
@@ -222,7 +232,7 @@ export const TOYS_E: Build[] = [
     // blanket: a band over the back (sphere girdle around z), edged with a trim loop
     const BC: V3 = [0, 1.05, -0.2], BR: V3 = [0.89, 0.79, 1.03];
     const P0 = (3 * PI) / 2 - 1.3, PL = 2.6, T0 = PI / 2 - 0.5, TL = 1.0;
-    k.add(blanket, new THREE.SphereGeometry(1, 32, 8, P0, PL, T0, TL), BC[0], BC[1], BC[2], 2, PI / 2, 0, 0, BR[0], BR[2], BR[1]);
+    k.add(blanket, uvFix(new THREE.SphereGeometry(1, 32, 8, P0, PL, T0, TL), PL / (2 * PI), TL / PI), BC[0], BC[1], BC[2], 2, PI / 2, 0, 0, BR[0], BR[2], BR[1]);
     const bl = (phi: number, th: number, lift = 0.02): V3 => {
       const lx = -Math.cos(phi) * Math.sin(th), ly = Math.cos(th), lz = Math.sin(phi) * Math.sin(th);
       return [BC[0] + BR[0] * lx * (1 + lift), BC[1] - BR[1] * lz * (1 + lift), BC[2] + BR[2] * ly * (1 + lift)];
@@ -270,7 +280,7 @@ export const TOYS_E: Build[] = [
     const C: V3 = [0, 1.15, -0.15], R: V3 = [0.56, 0.48, 0.78];
     k.add(body, sph(1), C[0], C[1], C[2], 3, 0, 0, 0, ...R);
     for (const [th, ph] of [[0.45, 0.4], [0.9, -0.4], [1.15, 0.5], [0.7, -1.3], [1.05, -2.3], [0.55, 2.6], [1.15, 3.5], [0.9, 2.0], [1.3, 1.1], [1.25, -1.0]] as const) {
-      onShell(k, spotsB, sph(0.13), C, R, th, ph, 1, [1, 0.3, 1], 0.01);
+      onShell(k, spotsB, sph(0.16), C, R, th, ph, 1, [1, 0.3, 1], 0.01);
     }
     // legs with striped leg warmers + hooves
     for (const s of [-1, 1]) for (const z of [0.3, -0.6]) {
@@ -287,7 +297,7 @@ export const TOYS_E: Build[] = [
     for (const [t, al] of [[0.15, 0.3], [0.3, 2.5], [0.48, -0.5], [0.62, 1.9], [0.78, 0.6], [0.9, 3.4], [0.55, -2.6], [0.25, -1.5]] as const) {
       const n = u.clone().multiplyScalar(Math.cos(al)).addScaledVector(v, Math.sin(al));
       const p = A.clone().addScaledVector(dn, len * t).addScaledVector(n, 0.2);
-      aim(k.add(spotsN, sph(0.1), p.x, p.y, p.z, 1, 0, 0, 0, 1, 0.3, 1), n);
+      aim(k.add(spotsN, sph(0.12), p.x, p.y, p.z, 1, 0, 0, 0, 1, 0.3, 1), n);
     }
     for (let i = 0; i < 6; i++) {
       const p = A.clone().addScaledVector(dn, len * (0.15 + i * 0.19)).addScaledVector(v, 0.19);
@@ -303,7 +313,7 @@ export const TOYS_E: Build[] = [
     // head: muzzle, ears, ossicones
     k.add(head, sph(0.34), 0, 2.48, 0.72, 2, 0, 0, 0, 1, 0.92, 1.1);
     for (const s of [-1, 1]) {
-      stick(k, head, 0.06, [s * 0.25, 2.6, 0.62], [s * 0.46, 2.66, 0.56]);
+      stick(k, muzzle, 0.07, [s * 0.25, 2.6, 0.62], [s * 0.48, 2.66, 0.56]);
       stick(k, hooves, 0.045, [s * 0.12, 2.72, 0.62], [s * 0.15, 2.92, 0.6]);
       k.add(hooves, sph(0.08), s * 0.155, 2.95, 0.6, 1);
       k.deco(sph(0.03), INK, s * 0.08, 2.4, 1.2, 0.3);
@@ -320,7 +330,7 @@ export const TOYS_E: Build[] = [
     k.add(body, sph(0.75), 0, 0.95, -0.15, 3, 0, 0, 0, 1, 0.95, 1.2);
     // stripes: sphere girdles around the long axis, plus the stinger
     for (const th of [1.45, 2.12]) {
-      k.add(bands, new THREE.SphereGeometry(1, 32, 6, 0, PI * 2, th, 0.34), 0, 0.95, -0.15, 2, PI / 2, 0, 0, 0.78, 0.93, 0.74);
+      k.add(bands, uvFix(new THREE.SphereGeometry(1, 32, 6, 0, PI * 2, th, 0.34), 1, 0.34 / PI), 0, 0.95, -0.15, 2, PI / 2, 0, 0, 0.78, 0.93, 0.74);
     }
     k.add(bands, cone(0.12, 0.3, 16), 0, 0.98, -1.12, 1, -PI / 2);
     // wings: two pairs, see-through-ish yarn
@@ -329,39 +339,40 @@ export const TOYS_E: Build[] = [
       k.add(wings, sph(0.28), s * 0.56, 1.55, -0.6, 1, 0.3, 0, -s * 1.0, 0.1, 1, 0.6);
     }
     // head with a big face, antennae with pompoms, flower
-    k.add(head, sph(0.5), 0, 1.32, 0.78, 2);
+    k.add(head, sph(0.5), 0, 1.38, 0.78, 2);
     for (const s of [-1, 1]) {
-      stick(k, antennae, 0.03, [s * 0.15, 1.76, 0.76], [s * 0.3, 2.08, 0.86]);
-      k.add(antennae, sph(0.1), s * 0.31, 2.12, 0.87, 1);
+      stick(k, antennae, 0.035, [s * 0.15, 1.82, 0.76], [s * 0.3, 2.14, 0.86]);
+      k.add(antennae, sph(0.125), s * 0.31, 2.19, 0.87, 1);
     }
-    eyes(k, 0, 1.4, 1.22, 0.18, 0.085);
-    cheeks(k, 0, 1.22, 1.16, 0.3, 0.07);
-    smile(k, 0, 1.26, 1.27, 0.07);
+    eyes(k, 0, 1.46, 1.22, 0.18, 0.085);
+    cheeks(k, 0, 1.28, 1.16, 0.3, 0.07);
+    smile(k, 0, 1.32, 1.27, 0.07);
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * PI * 2;
-      k.add(flower, sph(0.12), -0.26 + Math.cos(a) * 0.13, 1.76, 0.78 + Math.sin(a) * 0.13, 1, 0, 0, 0, 1, 0.45, 1);
+      k.add(flower, sph(0.15), -0.27 + Math.cos(a) * 0.16, 1.82, 0.78 + Math.sin(a) * 0.16, 1, 0, 0, 0, 1, 0.45, 1);
     }
-    k.deco(sph(0.075), 0xffd51c, -0.26, 1.8, 0.78, 0.5);
+    k.deco(sph(0.09), 0xffd51c, -0.27, 1.87, 0.78, 0.5);
     // scarf between head and body
-    ring(k, scarf, 0.36, 0.1, [0, 1.0, 0.56], [0, 0.55, 0.83], 1);
-    k.add(scarf, sph(0.11), 0.3, 0.92, 0.82, 1);
-    stick(k, scarf, 0.08, [0.33, 0.88, 0.86], [0.5, 0.6, 0.9]);
+    ring(k, scarf, 0.36, 0.1, [0, 1.04, 0.56], [0, 0.55, 0.83], 1);
+    k.add(scarf, sph(0.11), 0.32, 0.98, 0.8, 1);
+    stick(k, scarf, 0.08, [0.36, 0.94, 0.84], [0.56, 0.68, 0.9]);
     // arms round the honey pot, little feet
     for (const s of [-1, 1]) {
-      stick(k, limbs, 0.09, [s * 0.6, 1.0, 0.35], [s * 0.3, 0.62, 0.84]);
-      k.add(limbs, sph(0.1), s * 0.28, 0.6, 0.88, 1);
+      stick(k, limbs, 0.09, [s * 0.6, 1.0, 0.35], [s * 0.34, 0.6, 0.86]);
+      k.add(limbs, sph(0.1), s * 0.32, 0.58, 0.9, 1);
       k.add(limbs, sph(0.16), s * 0.3, 0.25, 0.25, 1, 0, 0, 0, 1, 0.6, 1.3);
     }
-    k.add(pot, cyl(0.25, 0.21, 0.42, 24), 0, 0.55, 0.75, 1);
-    k.add(rim, tor(0.24, 0.065), 0, 0.77, 0.75, 1, PI / 2);
-    k.add(rim, sph(0.22), 0, 0.82, 0.75, 1, 0, 0, 0, 1, 0.35, 1);
-    k.deco(new THREE.PlaneGeometry(0.3, 0.11), 0xffffff, 0, 0.55, 0.995, 0.6, 0, 0, 0, 1, 1, 1, plateTexture('HONEY'));
-    for (const [x, l] of [[-0.12, 0.12], [0.1, 0.18]] as const) decoStick(k, 0xffb11a, 0.035, [x, 0.76, 0.98], [x, 0.76 - l, 0.985], 0.2);
+    k.add(pot, cyl(0.31, 0.26, 0.46, 24), 0, 0.5, 0.82, 1);
+    k.add(pot, sph(0.3), 0, 0.3, 0.82, 1, 0, 0, 0, 0.9, 0.3, 0.9);
+    k.add(rim, tor(0.3, 0.075), 0, 0.74, 0.82, 1, PI / 2);
+    k.add(rim, sph(0.27), 0, 0.78, 0.82, 1, 0, 0, 0, 1, 0.35, 1);
+    k.deco(new THREE.PlaneGeometry(0.36, 0.13), 0xffffff, 0, 0.5, 1.125, 0.6, 0, 0, 0, 1, 1, 1, plateTexture('HONEY'));
+    for (const [x, l] of [[-0.14, 0.12], [0.12, 0.18]] as const) decoStick(k, 0xffb11a, 0.04, [x, 0.73, 1.1], [x, 0.73 - l, 1.11], 0.2);
   },
   // 46 Fire Truck: ladder on top, siren, hose reel, side lockers
   (k) => {
     const body = k.part(6), cab = k.part(6), stripe = k.part(2), fenders = k.part(4), bumpers = k.part(1),
-      lockers = k.part(0), turntable = k.part(5), ladder = k.part(7), hose = k.part(5), grille = k.part(4);
+      lockers = k.part(0), turntable = k.part(5), ladder = k.part(7), hose = k.part(5), rungs = k.part(7), grille = fenders;
     k.add(body, box(1.25, 0.62, 1.75, 0.18), 0, 0.68, -0.45, 3);
     k.add(cab, box(1.22, 1.05, 0.9, 0.25), 0, 0.95, 0.85, 3);
     k.add(stripe, box(1.29, 0.1, 1.79, 0.05), 0, 0.82, -0.45, 2);
@@ -402,7 +413,7 @@ export const TOYS_E: Build[] = [
     for (const s of [-1, 1]) stick(k, ladder, 0.05, [s * 0.22, L0[1], L0[2]], [s * 0.22, L1[1], L1[2]]);
     for (let i = 0; i < 6; i++) {
       const t = (i + 0.5) / 6;
-      k.add(ladder, capsule(0.035, 0.42), 0, L0[1] + (L1[1] - L0[1]) * t, L0[2] + (L1[2] - L0[2]) * t, 1, 0, 0, PI / 2);
+      k.add(rungs, capsule(0.05, 0.42), 0, L0[1] + (L1[1] - L0[1]) * t, L0[2] + (L1[2] - L0[2]) * t, 1, 0, 0, PI / 2);
     }
     // hose reel on the deck
     k.add(hose, tor(0.18, 0.08), 0.42, 1.25, 0.05, 1, 0, PI / 2, 0);
@@ -414,7 +425,7 @@ export const TOYS_E: Build[] = [
     const hull = k.part(2), cap = k.part(6), bands = k.part(1), tower = k.part(5), portholes = k.part(6),
       scope = k.part(4), sideFins = k.part(7), tailFins = k.part(7), prop = k.part(3), stern = k.part(1);
     k.add(hull, capsule(0.62, 1.5), 0, 0.85, 0, 3, PI / 2, 0, 0, 0.95, 1, 1);
-    k.add(cap, new THREE.SphereGeometry(0.64, 28, 12, 0, PI * 2, 0, 1.0), 0, 0.85, 0.75, 2, PI / 2, 0, 0, 0.95, 1, 1);
+    k.add(cap, uvFix(new THREE.SphereGeometry(0.64, 28, 12, 0, PI * 2, 0, 1.0), 1, 1.0 / PI), 0, 0.85, 0.75, 2, PI / 2, 0, 0, 0.95, 1, 1);
     for (const z of [0.3, -0.3]) k.add(bands, tor(0.63, 0.065), 0, 0.85, z, 2, 0, 0, 0, 0.95, 1, 1);
     k.add(stern, tor(0.6, 0.08), 0, 0.85, -0.85, 2, 0, 0, 0, 0.95, 1, 1);
     k.add(stern, tor(0.4, 0.07), 0, 0.85, -1.18, 1, 0, 0, 0, 0.95, 1, 1);
@@ -429,16 +440,16 @@ export const TOYS_E: Build[] = [
     }
     // conning tower, rim, hatch, periscope
     k.add(tower, box(0.42, 0.5, 0.8, 0.18), 0, 1.6, -0.05, 2);
-    k.add(cap, box(0.48, 0.08, 0.86, 0.04), 0, 1.86, -0.05, 1);
+    k.add(scope, box(0.48, 0.08, 0.86, 0.04), 0, 1.86, -0.05, 1);
     k.deco(cyl(0.08, 0.08, 0.03), GLASS, 0, 1.62, 0.355, 0.1, PI / 2);
-    k.add(scope, cyl(0.14, 0.14, 0.07, 20), -0.05, 1.93, 0.12, 1);
-    k.deco(tor(0.09, 0.02), 0xcfd3dc, -0.05, 1.99, 0.12, 0.3, PI / 2);
-    k.add(scope, cyl(0.045, 0.045, 0.55, 12), 0.1, 2.15, -0.3, 1);
-    k.add(scope, sph(0.07), 0.1, 2.42, -0.3, 1);
-    k.add(scope, cyl(0.06, 0.06, 0.18, 12), 0.1, 2.42, -0.2, 1, PI / 2);
-    k.deco(cyl(0.045, 0.045, 0.02), GLASS, 0.1, 2.42, -0.105, 0.1, PI / 2);
+    k.add(scope, cyl(0.17, 0.17, 0.1, 20), -0.05, 1.94, 0.14, 1);
+    k.deco(tor(0.1, 0.022), 0xcfd3dc, -0.05, 2.01, 0.14, 0.3, PI / 2);
+    k.add(scope, cyl(0.06, 0.06, 0.55, 12), 0.1, 2.15, -0.3, 1);
+    k.add(scope, sph(0.09), 0.1, 2.44, -0.3, 1);
+    k.add(scope, cyl(0.08, 0.08, 0.22, 12), 0.1, 2.44, -0.18, 1, PI / 2);
+    k.deco(cyl(0.06, 0.06, 0.02), GLASS, 0.1, 2.44, -0.065, 0.1, PI / 2);
     // fins
-    for (const s of [-1, 1]) k.add(sideFins, box(0.5, 0.07, 0.3, 0.03), s * 0.78, 0.78, 0.62, 1, 0, 0, s * 0.12);
+    for (const s of [-1, 1]) k.add(sideFins, box(0.6, 0.08, 0.36, 0.035), s * 0.82, 0.78, 0.6, 1, 0, 0, s * 0.12);
     k.add(tailFins, box(0.07, 1.05, 0.34, 0.03), 0, 0.85, -1.22, 1);
     k.add(tailFins, box(1.05, 0.07, 0.34, 0.03), 0, 0.85, -1.22, 1);
     // propeller in a shroud
@@ -456,13 +467,13 @@ export const TOYS_E: Build[] = [
   // 48 Treasure Chest: lid flung open on a pile of gold, crown and pearls
   (k) => {
     const base = k.part(5), lid = k.part(5), pile = k.part(2), straps = k.part(7), lidStraps = k.part(7),
-      rim = k.part(6), lock = k.part(2), feet = k.part(3), pearls = k.part(0), crown = k.part(4);
+      rim = k.part(6), lock = lidStraps, feet = k.part(3), pearls = k.part(0), crown = k.part(4), lidRim = k.part(6);
     k.add(base, box(1.8, 0.95, 1.15, 0.14), 0, 0.62, 0, 3);
     k.add(rim, box(1.86, 0.12, 1.21, 0.05), 0, 1.07, 0, 2);
     k.add(rim, box(1.86, 0.12, 1.21, 0.05), 0, 0.2, 0, 2);
     for (const s of [-1, 1]) {
       k.add(straps, box(0.18, 0.99, 1.2, 0.05), s * 0.55, 0.62, 0, 1);
-      for (const z of [-0.42, 0.42]) k.add(feet, sph(0.14), s * 0.75, 0.12, z, 1, 0, 0, 0, 1, 0.75, 1);
+      for (const z of [-0.42, 0.42]) k.add(feet, sph(0.17), s * 0.74, 0.12, z, 1, 0, 0, 0, 1, 0.7, 1);
     }
     // face on the front
     eyes(k, 0, 0.7, 0.6, 0.25, 0.085);
@@ -480,43 +491,43 @@ export const TOYS_E: Build[] = [
     }
     // crown on top of the pile
     const cp: V3 = [0.32, 1.42, 0.18];
-    k.add(crown, cyl(0.2, 0.23, 0.16, 16), cp[0], cp[1], cp[2], 1, 0, 0, -0.2);
+    k.add(crown, cyl(0.24, 0.27, 0.2, 16), cp[0], cp[1], cp[2], 1, 0, 0, -0.2);
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * PI * 2 + PI / 2;
-      k.add(crown, cone(0.06, 0.16, 12), cp[0] + Math.cos(a) * 0.18 + 0.03, cp[1] + 0.15 - Math.cos(a) * 0.03, cp[2] + Math.sin(a) * 0.18, 1, 0, 0, -0.2);
+      k.add(crown, cone(0.075, 0.2, 12), cp[0] + Math.cos(a) * 0.22 + 0.04, cp[1] + 0.19 - Math.cos(a) * 0.04, cp[2] + Math.sin(a) * 0.22, 1, 0, 0, -0.2);
     }
-    k.deco(sph(0.05), 0xe2244a, cp[0], cp[1], cp[2] + 0.22, 0.2);
+    k.deco(sph(0.06), 0xe2244a, cp[0], cp[1], cp[2] + 0.26, 0.2);
     // pearl necklace draped over the front
-    k.add(pearls, tube([[-0.46, 1.22, 0.38], [-0.4, 1.14, 0.63], [-0.2, 0.95, 0.64], [0, 0.9, 0.64], [0.2, 0.95, 0.64], [0.38, 1.14, 0.63], [0.42, 1.22, 0.38]], 0.055, 40), 0, 0, 0, 1);
+    k.add(pearls, tube([[-0.46, 1.22, 0.38], [-0.4, 1.14, 0.63], [-0.2, 0.95, 0.64], [0, 0.9, 0.64], [0.2, 0.95, 0.64], [0.38, 1.14, 0.63], [0.42, 1.22, 0.38]], 0.065, 40), 0, 0, 0, 1);
     k.add(pearls, heart(0.2), 0, 0.82, 0.68, 1);
     // the lid, built closed and then swung open on its back hinge
     pivot(k, [0, 1.12, -0.58], [-0.85, 0, 0], () => {
-      k.add(lid, new THREE.CylinderGeometry(0.6, 0.6, 1.8, 28, 1, false, 0, PI), 0, 1.12, 0, 3, 0, 0, PI / 2);
-      k.add(rim, box(1.86, 0.1, 1.21, 0.05), 0, 1.16, 0, 2);
+      k.add(lid, uvFix(new THREE.CylinderGeometry(0.6, 0.6, 1.8, 28, 1, false, 0, PI), 0.5, 1), 0, 1.12, 0, 3, 0, 0, PI / 2);
+      k.add(lidRim, box(1.86, 0.1, 1.21, 0.05), 0, 1.16, 0, 2);
       for (const s of [-1, 1]) k.add(lidStraps, tor(0.61, 0.075, PI), s * 0.55, 1.12, 0, 1, 0, PI / 2, 0);
-      k.add(lock, box(0.3, 0.32, 0.1, 0.06), 0, 1.22, 0.62, 1);
-      k.deco(sph(0.045), INK, 0, 1.25, 0.68, 0.3);
-      k.deco(box(0.03, 0.08, 0.02, 0.01), INK, 0, 1.18, 0.68, 0.3);
+      k.add(lock, box(0.38, 0.4, 0.12, 0.07), 0, 1.22, 0.63, 1);
+      k.deco(sph(0.05), INK, 0, 1.26, 0.7, 0.3);
+      k.deco(box(0.035, 0.1, 0.02, 0.01), INK, 0, 1.18, 0.7, 0.3);
     });
   },
   // 49 Carousel: striped tent roof, scalloped valance, three ponies on poles
   (k) => {
     const base = k.part(1), baseRim = k.part(2), column = k.part(5), roofA = k.part(6), roofB = k.part(0),
-      valance = k.part(2), horses = k.part(7), manes = k.part(4), saddles = k.part(5), flag = k.part(4);
+      valance = k.part(2), horses = k.part(7), manes = k.part(4), saddles = k.part(5), flag = manes, skirt = k.part(2);
     k.add(base, cyl(1.15, 1.2, 0.28, 40), 0, 0.14, 0, 3);
     k.add(baseRim, tor(1.16, 0.075), 0, 0.29, 0, 3, PI / 2);
-    k.add(baseRim, tor(1.2, 0.065), 0, 0.04, 0, 3, PI / 2);
+    k.add(skirt, tor(1.2, 0.07), 0, 0.04, 0, 3, PI / 2);
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * PI * 2;
       k.deco(sph(0.045), 0xfff1a8, Math.sin(a) * 1.21, 0.15, Math.cos(a) * 1.21, 0.2);
     }
     // centre column with collars
-    k.add(column, cyl(0.17, 0.17, 1.62, 20), 0, 1.08, 0, 2);
-    k.add(column, tor(0.19, 0.06), 0, 0.34, 0, 1, PI / 2);
-    k.add(column, tor(0.19, 0.06), 0, 1.84, 0, 1, PI / 2);
+    k.add(column, cyl(0.21, 0.21, 1.62, 20), 0, 1.08, 0, 2);
+    k.add(column, tor(0.24, 0.075), 0, 0.36, 0, 1, PI / 2);
+    k.add(column, tor(0.24, 0.075), 0, 1.82, 0, 1, PI / 2);
     // striped roof from eight wedges + valance + finial
     for (let i = 0; i < 8; i++) {
-      k.add(i % 2 ? roofB : roofA, new THREE.ConeGeometry(1.3, 0.72, 8, 1, false, (i * PI) / 4, PI / 4), 0, 2.24, 0, 2);
+      k.add(i % 2 ? roofB : roofA, uvFix(new THREE.ConeGeometry(1.3, 0.72, 8, 1, false, (i * PI) / 4, PI / 4), 1 / 8, 1), 0, 2.24, 0, 2);
     }
     k.add(valance, tor(1.28, 0.07), 0, 1.9, 0, 3, PI / 2);
     for (let i = 0; i < 12; i++) {
@@ -529,9 +540,9 @@ export const TOYS_E: Build[] = [
     k.deco(sph(0.035), GOLD, 0, 3.07, 0, 0.3);
     // ponies riding round (gold poles through them)
     for (let i = 0; i < 3; i++) {
-      const a = 0.55 + (i * 2 * PI) / 3, R = 0.74, x = Math.sin(a) * R, z = Math.cos(a) * R, y = 0.95 + (i === 1 ? 0.12 : 0);
+      const a = 0.55 + (i * 2 * PI) / 3, R = 0.74, x = Math.sin(a) * R, z = Math.cos(a) * R, y = 0.98 + (i === 1 ? 0.07 : 0);
       k.deco(cyl(0.03, 0.03, 1.56, 10), GOLD, x, 1.08, z, 0.25);
-      pivot(k, [x, y, z], [0, a + PI / 2, 0], () => {
+      const g = pivot(k, [x, y, z], [0, a + PI / 2, 0], () => {
         const P = (px: number, py: number, pz: number): V3 => [x + px, y + py, z + pz];
         k.add(horses, capsule(0.15, 0.32), ...P(0, 0, 0), 1, PI / 2);
         stick(k, horses, 0.09, P(0, 0.06, 0.2), P(0, 0.3, 0.32));
@@ -543,14 +554,15 @@ export const TOYS_E: Build[] = [
         }
         k.add(manes, tube([P(0, 0.12, 0.08), P(0, 0.3, 0.2), P(0, 0.48, 0.34)], 0.055, 16), 0, 0, 0, 1);
         stick(k, manes, 0.05, P(0, 0.02, -0.32), P(0, -0.2, -0.44));
-        k.add(saddles, sph(0.17), ...P(0, 0.12, -0.02), 1, 0, 0, 0, 1.05, 0.35, 1.1);
+        k.add(saddles, sph(0.2), ...P(0, 0.12, -0.02), 1, 0, 0, 0, 1.05, 0.38, 1.1);
       });
+      g.scale.setScalar(1.4);
     }
   },
   // 50 Dragon: chubby baby dragon with bat wings, spikes and a spade tail
   (k) => {
     const body = k.part(3), belly = k.part(2), head = k.part(3), snout = k.part(7), spikes = k.part(5),
-      wingL = k.part(4), wingR = k.part(4), tail = k.part(7), limbs = k.part(3), scarf = k.part(6);
+      wingL = k.part(4), wingR = k.part(4), tail = k.part(7), limbs = k.part(7), scarf = k.part(6);
     const C: V3 = [0, 0.82, 0], R: V3 = [0.7, 0.735, 0.63];
     k.add(body, sph(1), C[0], C[1], C[2], 3, 0, 0, 0, ...R);
     k.add(belly, sph(0.48), 0, 0.8, 0.36, 2, 0, 0, 0, 1, 1.25, 0.55);
