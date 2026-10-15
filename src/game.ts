@@ -421,10 +421,10 @@ function play(evs: Ev[]): void {
       group.sort((a2, b2) => a2.slot - b2.slot);
       group.forEach((b, i) => { b.leaving = { t: -delay, x0: 0, y0: 0, m: 0, u: 0, mx: 0, my: 0, lead: i === 1, group }; });
       leavingBalls.push(...group);
-      // the rest close up at once, while the three merge
+      // the rest keep their places while the three merge; once the match is done they close up
       balls = balls.filter((b) => !b.leaving);
-      balls.forEach((b, k) => { b.slot = k; });
       void wait(delay).then(() => { if (run === runId) { sfx.match(); haptic(15); } });
+      void wait(delay + MERGE + 0.12).then(() => { if (run === runId) balls.forEach((b, k) => { b.slot = k; }); });
       void wait(delay + MERGE).then(() => {
         if (run !== runId) return;
         const parts = knitToy(c);
@@ -1608,8 +1608,9 @@ function drawPopup(): void {
   if (!popup) return;
   const p = popup;
   const k = Math.min(1, p.t / 0.25);
-  ctx.fillStyle = `rgba(20,30,70,${(p.kind === 'win' ? 0.3 : 0.55) * k})`;
-  ctx.fillRect(0, p.kind === 'win' ? L.basket.y - 4 : 0, L.W, L.H);
+  // the whole screen darkens behind every popup, so the eye goes to it
+  ctx.fillStyle = `rgba(8,12,38,${0.66 * k})`;
+  ctx.fillRect(0, 0, L.W, L.H);
   const s = Math.max(0.01, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2);
   ctx.save();
   ctx.translate(L.colX + L.colW / 2, L.H / 2);
