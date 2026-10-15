@@ -159,20 +159,21 @@ function fiberTexture(): THREE.CanvasTexture {
   return fiberTex;
 }
 /** Matte wool with a soft velvety sheen (used for the balls of yarn). */
-function woolMaterial(color: THREE.Color, rep = 3): THREE.MeshPhysicalMaterial {
+const BALL_LIGHT = [2.9, 3.6];
+function woolMaterial(color: THREE.Color, rep = 3, raw = false): THREE.MeshPhysicalMaterial {
   const map = fiberTexture().clone();
   map.needsUpdate = true;
   map.repeat.set(rep, 1);
-  const c = ropeColor(color);
+  const c = raw ? color.clone() : ropeColor(color);
   return new THREE.MeshPhysicalMaterial({ color: c, map, vertexColors: true, roughness: 0.9, metalness: 0, sheen: 1, sheenRoughness: 0.55, sheenColor: c.clone().lerp(new THREE.Color(0xffffff), 0.55) });
 }
 /** A ball of wool: a soft core wound round with many thin strands every which way, and a loose end. */
-export function ropeBall(color: THREE.Color, r = 0.3): THREE.Group {
+export function ropeBall(color: THREE.Color, r = 0.3, raw = false): THREE.Group {
   const g = new THREE.Group();
   const coreG = new THREE.SphereGeometry(r * 0.9, 28, 20);
   coreG.setAttribute('color', new THREE.BufferAttribute(new Float32Array(coreG.attributes.position.count * 3).fill(0.82), 3));
-  g.add(new THREE.Mesh(coreG, woolMaterial(color, 6)));
-  const strand = woolMaterial(color, 10);
+  g.add(new THREE.Mesh(coreG, woolMaterial(color, 6, raw)));
+  const strand = woolMaterial(color, 10, raw);
   let seed = 5;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let k = 0; k < 24; k++) {
@@ -388,11 +389,12 @@ export class Scene3D {
     const hit = this.balls.get(key);
     if (hit) return hit;
     const scene = new THREE.Scene();
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a6a50, 1.6));
-    const l = new THREE.DirectionalLight(0xffffff, 2.4);
+    // lit brighter than the board, so the ball in the basket reads as the same colour as its strand
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a890, BALL_LIGHT[0]));
+    const l = new THREE.DirectionalLight(0xffffff, BALL_LIGHT[1]);
     l.position.set(-2, 4, 5);
     scene.add(l);
-    const ball = ropeBall(new THREE.Color(color), 1);
+    const ball = ropeBall(new THREE.Color(color), 1, true);
     ball.rotation.set(0.5, 0.3, 0.2);
     scene.add(ball);
     const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);

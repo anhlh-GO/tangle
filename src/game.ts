@@ -29,6 +29,8 @@ import popIntroJpg from './assets/pop_intro.jpg';
 import popIntroA from './assets/pop_intro_a.png';
 import popFrozenJpg from './assets/pop_frozen.jpg';
 import popFrozenA from './assets/pop_frozen_a.png';
+import popLockJpg from './assets/pop_lock.jpg';
+import popLockA from './assets/pop_lock_a.png';
 
 /**
  * A cut-out picture shipped small: colour as JPEG + its alpha as a grey PNG, joined into a canvas once
@@ -83,7 +85,7 @@ function blankBox(c: CanvasRenderingContext2D, [x0, y0, x1, y1]: Box): void {
 }
 const POP: Record<string, HTMLCanvasElement> = {};
 async function buildPopups(): Promise<void> {
-  const make = async (jpg: string, mask: string, variants: Record<string, Box[]>, cut: keyof typeof CUT) => {
+  const make = async (jpg: string, mask: string, variants: Record<string, Box[]>, cut: keyof typeof CUT, post: Record<string, (g: CanvasRenderingContext2D, base: HTMLCanvasElement) => void> = {}) => {
     const [im, al] = await Promise.all([loadImg(jpg), loadImg(mask)]);
     const base = document.createElement('canvas');
     base.width = im.width; base.height = im.height;
@@ -102,25 +104,33 @@ async function buildPopups(): Promise<void> {
       const cg = c.getContext('2d', { willReadFrequently: true })!;
       cg.drawImage(base, 0, 0);
       for (const b of boxes) blankBox(cg, cutBox(cut, b));
+      post[name]?.(cg, base);
       POP[name] = c;
     }
   };
   await Promise.all([
-    make(popSettingsJpg, popSettingsA, { settings: [] }, 'settings'),
+    make(popSettingsJpg, popSettingsA, { settings: [SET_CLOSE_ART] }, 'settings'),
     make(popWinJpg, popWinA, { win: [WIN_TEXT] }, 'win'),
     make(popIntroJpg, popIntroA, { intro: [], introBlank: [INTRO_TITLE, INTRO_ART, INTRO_TEXT] }, 'intro'),
     make(popFrozenJpg, popFrozenA, { introFrozen: [] }, 'frozen'),
+    make(popLockJpg, popLockA, { introLock: [] }, 'lock'),
     make(popFullJpg, popFullA, {
       full: [FULL_BALLS],
-      fullNoSlot: [FULL_BALLS, FULL_SLOT_BTN],
+      fullNoSlot: [FULL_BALLS, FULL_BOTH_BTN],
       fullAd: [FULL_BALLS, FULL_FREE],
       stuck: [FULL_TITLE, FULL_BALLS, FULL_MSG, FULL_SLOT_IN],
-    }, 'full'),
+    }, 'full', {
+      fullNoSlot: (g, base) => {
+        // the Play Again button, whole (with its shadow), moved up to the middle of the empty space
+        const [x0, y0, x1, y1] = cutBox('full', FULL_RETRY_ART), dy = Math.round(-FULL_SHIFT * CUT.full.s);
+        g.drawImage(base, x0, y0, x1 - x0, y1 - y0, x0, y0 + dy, x1 - x0, y1 - y0);
+      },
+    }),
   ]);
 }
 // Boxes are measured on the original reference pictures; each cut-out keeps its crop origin and scale.
-const CUT = { settings: { ox: 60, oy: 94, s: 0.60491 }, win: { ox: 76, oy: 30, s: 0.58554 }, full: { ox: 53, oy: 81, s: 0.57866 }, intro: { ox: 61, oy: 84, s: 0.57762 }, frozen: { ox: 73, oy: 97, s: 0.59204 } };
-const PIC_CUT: Record<string, keyof typeof CUT> = { settings: 'settings', win: 'win', full: 'full', fullNoSlot: 'full', fullAd: 'full', stuck: 'full', intro: 'intro', introBlank: 'intro', introFrozen: 'frozen' };
+const CUT = { settings: { ox: 60, oy: 94, s: 0.60491 }, win: { ox: 76, oy: 30, s: 0.58554 }, full: { ox: 53, oy: 81, s: 0.57866 }, intro: { ox: 61, oy: 84, s: 0.57762 }, frozen: { ox: 73, oy: 97, s: 0.59204 }, lock: { ox: 70, oy: 114, s: 0.58129 } };
+const PIC_CUT: Record<string, keyof typeof CUT> = { settings: 'settings', win: 'win', full: 'full', fullNoSlot: 'full', fullAd: 'full', stuck: 'full', intro: 'intro', introBlank: 'intro', introFrozen: 'frozen', introLock: 'lock' };
 const cutBox = (k: keyof typeof CUT, [x0, y0, x1, y1]: Box): Box => {
   const c = CUT[k];
   return [Math.round((x0 - c.ox) * c.s), Math.round((y0 - c.oy) * c.s), Math.round((x1 - c.ox) * c.s), Math.round((y1 - c.oy) * c.s)];
@@ -130,6 +140,7 @@ const SET_X = { x: 1048, y: 222, r: 70 };
 const SET_TOGGLES: Box[] = [[735, 348, 995, 462], [735, 523, 995, 638], [735, 700, 995, 815]];
 const SET_RESTART: Box = [220, 868, 933, 1022];
 const SET_CLOSE: Box = [322, 1050, 832, 1178];
+const SET_CLOSE_ART: Box = [300, 1040, 855, 1192];
 // All Untangled
 const WIN_TEXT: Box = [280, 678, 970, 862];
 const WIN_NEXT: Box = [270, 895, 975, 1075];
@@ -142,6 +153,10 @@ const FULL_SLOT_IN: Box = [260, 730, 960, 890];
 const FULL_FREE: Box = [490, 830, 615, 888];
 const FULL_SLOT: Box = [205, 712, 1000, 912];
 const FULL_RETRY: Box = [262, 940, 950, 1100];
+const FULL_BOTH_BTN: Box = [150, 700, 1070, 1125];      // both buttons' area (no +1 Slot: cleared, Play Again moved up)
+const FULL_RETRY_ART: Box = [240, 930, 975, 1118];      // the Play Again button with its shadow
+const FULL_SHIFT = 115;                                 // how far it moves up (original px)
+const FULL_RETRY_UP: Box = [262, 940 - FULL_SHIFT, 950, 1100 - FULL_SHIFT];
 // Intro card (the Mystery Yarn reference): title, picture, text box, "Got it!"
 const INTRO_TITLE: Box = [330, 112, 905, 218];
 const INTRO_ART: Box = [150, 296, 1082, 655];
@@ -150,6 +165,7 @@ const INTRO_OK: Box = [300, 915, 925, 1090];
 // Frozen Slot card (its own reference picture, with a close button)
 const FROZEN_OK: Box = [295, 935, 905, 1100];
 const FROZEN_X = { x: 1087, y: 207, r: 68 };
+const LOCK_OK: Box = [302, 909, 939, 1074];
 void buildPopups();
 import { adBadge, bubble, button, card, gearButton, inside, pointer, toast, type BoosterKey, type Rect } from './ui';
 
@@ -366,6 +382,7 @@ function startLevel(index: number): void {
   scene.setTints(plan.color.map((c) => (c >= 0 ? YARN[c].color : null)));
   knitLog = [];
   show = null;
+  lastBlink = -1;
   cutFx = null;
   drillFx = null;
   balls = [];
@@ -717,6 +734,8 @@ async function useBooster(k: BoosterKey, gift = false): Promise<void> {
   spend(k);
 }
 let freeSnip = false;
+let clearArm = 0;     // Settings > Clear Data waits for a second tap while > 0
+let lastBlink = -1;   // the last free basket hole blinks 3 times (time, -1 = off)
 let lastPopup: Popup | null = null;
 let lastRoom = 9;
 
@@ -1212,6 +1231,20 @@ async function popupTap(x: number, y: number): Promise<void> {
       armed = 'scissors';
       freeSnip = true;
       break;
+    case 'clear':
+      // two taps: the first arms it (3 s), the second wipes progress and starts over at level 1
+      if (clearArm <= 0) { clearArm = 3; sfx.warn(); break; }
+      clearArm = 0;
+      save.b = { undo: 2, scissors: 2, slot: 1 };
+      save.seen = {};
+      save.wardrobe = [];
+      persist();
+      popup = null;
+      sfx.close();
+      events.emit('lose', { canRevive: false });
+      startLevel(0);
+      showToast('Progress cleared');
+      break;
     case 'close':
       popup = null;
       runQueue();
@@ -1281,6 +1314,8 @@ function update(dt: number): void {
   clock += dt;
   updateCut(dt);
   updateDrill(dt);
+  if (clearArm > 0) clearArm = Math.max(0, clearArm - dt);
+  if (lastBlink >= 0) { lastBlink += dt; if (lastBlink > 1.25) lastBlink = -1; }
   // popup in / out sounds
   if (popup !== lastPopup) {
     if (popup && popup.kind !== 'win') sfx.popup();
@@ -1292,6 +1327,7 @@ function update(dt: number): void {
   const left = room(S) - S.basket.length;
   if (left === 1 && lastRoom !== 1 && !ended && S.basket.length > 0) {
     sfx.alarm(); haptic([20, 40, 20]);
+    lastBlink = 0;
     if (!save.seen.tipFull && !coach && !popup) {
       save.seen.tipFull = true;
       persist();
@@ -1480,15 +1516,6 @@ function drawHud(): void {
   // the basket: the wooden tray from the reference picture, six carved holes
   const bk = L.basket;
   const full = S.basket.length >= room(S) - 1;
-  if (full && !ended) {
-    ctx.save();
-    ctx.shadowColor = `rgba(255,60,60,${0.55 + 0.3 * Math.sin(clock * 8)})`;
-    ctx.shadowBlur = bk.h * 0.35;
-    ctx.fillStyle = 'rgba(255,80,80,0.5)';
-    roundRect(ctx, bk.x + bk.w * 0.01, bk.y + bk.h * 0.04, bk.w * 0.98, bk.h * 0.9, bk.h * 0.25);
-    ctx.fill();
-    ctx.restore();
-  }
   if (trayImg.ok) ctx.drawImage(trayImg.c, bk.x, bk.y, bk.w, bk.h);
   for (let k2 = 0; k2 < HOLES; k2++) {
     if (!holeLocked(k2)) continue;
@@ -1505,6 +1532,20 @@ function drawHud(): void {
     ctx.beginPath(); ctx.arc(s2.x, s2.y - lr * 0.25, lr * 0.45, Math.PI, 0); ctx.stroke();
   }
   drawFrozenSlot();
+  if (lastBlink >= 0 && S.basket.length < room(S)) {
+    // three quick blinks on the one hole that is still free
+    const ph = (lastBlink % 0.42) / 0.42, a = Math.sin(Math.PI * ph);
+    const h = slotXY(S.basket.length);
+    ctx.save();
+    ctx.shadowColor = `rgba(255,70,70,${a})`;
+    ctx.shadowBlur = h.r * 0.8;
+    ctx.strokeStyle = `rgba(255,90,90,${0.95 * a})`;
+    ctx.lineWidth = h.r * 0.16;
+    ctx.beginPath(); ctx.arc(h.x, h.y, h.r * (1.02 + 0.08 * a), 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = `rgba(255,120,120,${0.28 * a})`;
+    ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
   for (const ball of balls) if (ball.t >= 0) yarnBall(ball.c, ball.x, ball.y, slotXY(0).r * 0.92 * (ball.t < 1 ? 0.7 + 0.3 * ball.t : 1));
   for (const ball of leavingBalls) {
     if (ball.t < 0) continue;   // still reeling in on the board
@@ -1799,7 +1840,7 @@ function drawPopup(): void {
         }
         hotspot('slot', boxAt(P, FULL_SLOT));
       }
-      hotspot('retry', boxAt(P, FULL_RETRY));
+      hotspot('retry', boxAt(P, fullB && !can ? FULL_RETRY_UP : FULL_RETRY));
     }
   } else if (p.kind === 'settings') {
     const P = popupPic('settings', 0.92);
@@ -1811,14 +1852,19 @@ function drawPopup(): void {
         popupButtons.push({ id: key, r });
       });
       hotspot('restart', boxAt(P, SET_RESTART));
-      hotspot('close', boxAt(P, SET_CLOSE));
+      const cr = boxAt(P, SET_CLOSE);
+      button(ctx, cr, clearArm > 0 ? 'Tap to confirm' : 'Clear Data', 'red', undefined, press.get('clear') ?? 0);
+      popupButtons.push({ id: 'clear', r: cr });
       hotspot('close', boxAt(P, [SET_X.x - SET_X.r, SET_X.y - SET_X.r, SET_X.x + SET_X.r, SET_X.y + SET_X.r]), true);
     }
   } else if (p.kind === 'intro') {
     // the Mystery Yarn card is the reference picture as it is; the others reuse its frame
-    const asIs = p.blocker === 'hidden' || p.blocker === 'frozen';
-    const P = popupPic(p.blocker === 'frozen' ? 'introFrozen' : asIs ? 'intro' : 'introBlank', 0.9);
-    if (P && p.blocker === 'frozen') {
+    const asIs = p.blocker === 'hidden' || p.blocker === 'frozen' || p.blocker === 'lock';
+    const P = popupPic(p.blocker === 'frozen' ? 'introFrozen' : p.blocker === 'lock' ? 'introLock' : asIs ? 'intro' : 'introBlank', 0.9);
+    if (P && p.blocker === 'lock') {
+      drawPic(P);
+      hotspot('close', boxAt(P, LOCK_OK));
+    } else if (P && p.blocker === 'frozen') {
       drawPic(P);
       hotspot('close', boxAt(P, FROZEN_OK));
       hotspot('close', boxAt(P, [FROZEN_X.x - FROZEN_X.r, FROZEN_X.y - FROZEN_X.r, FROZEN_X.x + FROZEN_X.r, FROZEN_X.y + FROZEN_X.r]), true);
@@ -1974,6 +2020,13 @@ requestAnimationFrame(frame);
 if (import.meta.env.DEV) {
   (window as unknown as { __knot: unknown }).__knot = {
     booster: (k: BoosterKey) => { void useBooster(k, true); },
+    ballColor: (c: number) => {
+      // average colour of the lit middle of the ball sprite vs the yarn colour (tuning aid)
+      const im = scene.ballSprite(YARN[c].color, 128), g = im.getContext('2d')!.getImageData(40, 40, 48, 48).data;
+      let r = 0, gg = 0, b = 0, n = 0;
+      for (let k = 0; k < g.length; k += 4) if (g[k + 3] > 200) { r += g[k]; gg += g[k + 1]; b += g[k + 2]; n++; }
+      return { yarn: YARN[c].color, ball: [r / n, gg / n, b / n].map(Math.round) };
+    },
     closePopup: () => { popup = null; coach = null; introQueue = []; },
     blk: () => ({ key: S.strands.findIndex((t) => t.key), chained: S.strands.map((t, i) => (t.knot !== undefined ? i : -1)).filter((i) => i >= 0), locked: S.strands.map((_, i) => (lockedOn(S, i) ? i : -1)).filter((i) => i >= 0), free: S.strands.map((_, i) => (free(S, i) && !S.gone[i] ? i : -1)).filter((i) => i >= 0) }),
     showPopup: (kind: 'win' | 'full' | 'stuck' | 'settings', basket?: number[]) => { if (basket) S.basket = basket; popup = { kind, t: 0 }; },
