@@ -39,10 +39,11 @@ jobs:
           sed -i 's/<activity/<activity android:screenOrientation="portrait"/' android/app/src/main/AndroidManifest.xml
           # the game's own launcher icon (plain PNGs; drop Capacitor's adaptive default)
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
-          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            dir=android/app/src/main/res/mipmap-${d%%:*}; px=${d##*:}
-            convert pwa/icon-512.png -resize ${px}x${px} $dir/ic_launcher.png
-            cp $dir/ic_launcher.png $dir/ic_launcher_round.png
+          # (sizes pre-made in pwa/android/mipmap-*)
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            dir=android/app/src/main/res/mipmap-$d
+            cp pwa/android/mipmap-$d/ic_launcher.png $dir/ic_launcher.png
+            cp pwa/android/mipmap-$d/ic_launcher.png $dir/ic_launcher_round.png
             rm -f $dir/ic_launcher_foreground.png
           done
           npx cap sync android
