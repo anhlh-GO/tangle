@@ -291,7 +291,7 @@ function layout(): Layout {
   const toy = { x: colX + colW * 0.12, y: 0.1 * H + dy, w: colW * 0.76, h: 0.21 * H };
   const bw = colW * 0.86, bh = bw * TRAY_AR;
   const basket = { x: colX + (colW - bw) / 2, y: 0.36 * H + dy - bh / 2, w: bw, h: bh };
-  const viewTop = 0.42 * H + dy;
+  const viewTop = 0.395 * H + dy;
   const boostR = Math.min(colW * 0.098, 0.048 * H);
   const viewBottom = Math.min(0.83 * H + dy, boostY - boostR * 1.45 - 0.015 * H);
   return {
@@ -313,7 +313,7 @@ function layout(): Layout {
 function placeBasket(): void {
   const t = scene.boardTop;
   if (!t || t.x1 - t.x0 < 10) return;
-  const tw = t.x1 - t.x0, w = tw * 0.92, h = w * TRAY_AR, cx = (t.x0 + t.x1) / 2;
+  const tw = t.x1 - t.x0, w = Math.min(tw * 1.0, L.colW * 0.97), h = w * TRAY_AR, cx = (t.x0 + t.x1) / 2;
   L.basket = { x: cx - w / 2, y: t.y - tw * 0.038 - h, w, h };
   L.toy.h = Math.max(L.H * 0.12, L.basket.y - L.H * 0.01 - L.toy.y);
 }
