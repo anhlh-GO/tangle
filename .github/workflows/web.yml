@@ -1,0 +1,50 @@
+# Build the single-file web game (Knot Untangle) and publish it on GitHub Pages.
+# One-time setup: repo Settings → Pages → Source: "GitHub Actions".
+name: Web (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Add to Home Screen: manifest, icons and an offline service worker, for the Pages build only
+      # (the Falcon build stays a single dist/index.html)
+      - name: Add the web-app files
+        run: |
+          cp pwa/manifest.webmanifest pwa/sw.js pwa/icon-*.png dist/
+          sed -i '/<\/head>/e cat pwa/inject.html' dist/index.html
+          grep -c 'rel="manifest"' dist/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

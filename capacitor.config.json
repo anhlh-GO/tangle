@@ -1,0 +1,6 @@
+{
+  "appId": "com.lahagame.knotuntangle",
+  "appName": "Knot Untangle",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#a9ddf8" }
+}

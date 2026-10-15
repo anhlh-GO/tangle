@@ -1,0 +1,15 @@
+{
+  "name": "Knot Untangle",
+  "short_name": "Untangle",
+  "description": "Pull the yarn off the pegs, match three of a colour and knit a 3D toy.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#a9ddf8",
+  "theme_color": "#a9ddf8",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
