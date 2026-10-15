@@ -16,7 +16,6 @@ import scissorsA from './assets/b_scissors_a.png';
 import slotJpg from './assets/b_slot.jpg';
 import slotA from './assets/b_slot_a.png';
 import trayJpg from './assets/tray.jpg';
-import bgPlayJpg from './assets/bg_play.jpg';
 import trayA from './assets/tray_a.png';
 import popSettingsJpg from './assets/pop_settings.jpg';
 import popSettingsA from './assets/pop_settings_a.png';
@@ -288,18 +287,18 @@ function layout(): Layout {
   const dy = hudY - 0.08 * H;                    // everything below follows the HUD down on notched phones
   const dr = colW * 0.05;
   const barTop = H - sbb - 0.14 * H;
-  const boostY = H - sbb - 0.11 * H;
+  const boostY = H - sbb - 0.094 * H;
   const toy = { x: colX + colW * 0.12, y: 0.1 * H + dy, w: colW * 0.76, h: 0.21 * H };
   const bw = colW * 0.86, bh = bw * TRAY_AR;
   const basket = { x: colX + (colW - bw) / 2, y: 0.36 * H + dy - bh / 2, w: bw, h: bh };
-  const viewTop = 0.395 * H + dy;
-  const boostR = Math.min(colW * 0.098, 0.048 * H);
-  const viewBottom = Math.min(0.83 * H + dy, boostY - boostR * 1.45 - 0.015 * H);
+  const viewTop = 0.42 * H + dy;
+  const boostR = Math.min(colW * 0.085, 0.042 * H);
+  const viewBottom = Math.min(0.845 * H + dy, boostY - boostR * 1.55);
   return {
     W, H, colX, colW, u, hudY,
-    gear: { x: colX + colW * 0.125, y: hudY, r: colW * 0.06 },
-    dots: [{ x: colX + colW * 0.3, r: dr }, { x: colX + colW * 0.7, r: dr }, { x: colX + colW * 0.86, r: dr }],
-    bar: { x: colX + colW * 0.3, y: hudY - dr * 0.5, w: colW * 0.4, h: dr },
+    gear: { x: colX + colW * 0.11, y: hudY - 0.003 * H, r: colW * 0.062 },
+    dots: [{ x: colX + colW * 0.29, r: dr }, { x: colX + colW * 0.66, r: dr }, { x: colX + colW * 0.79, r: dr }],
+    bar: { x: colX + colW * 0.29, y: hudY - dr * 0.5, w: colW * 0.37, h: dr },
     toy, basket, viewTop, viewBottom,
     barTop, boostY, boostR,
   };
@@ -314,8 +313,8 @@ function layout(): Layout {
 function placeBasket(): void {
   const t = scene.boardTop;
   if (!t || t.x1 - t.x0 < 10) return;
-  const tw = t.x1 - t.x0, w = Math.min(tw * 1.0, L.colW * 0.97), h = w * TRAY_AR, cx = (t.x0 + t.x1) / 2;
-  L.basket = { x: cx - w / 2, y: t.y - tw * 0.038 - h, w, h };
+  const tw = t.x1 - t.x0, w = Math.min(tw * 1.08, L.colW * 0.86), h = w * TRAY_AR, cx = (t.x0 + t.x1) / 2;
+  L.basket = { x: cx - w / 2, y: t.y - tw * 0.06 - h, w, h };
   L.toy.h = Math.max(L.H * 0.12, L.basket.y - L.H * 0.01 - L.toy.y);
 }
 
@@ -1507,8 +1506,24 @@ function dot(x: number, y: number, r: number, n: number): void {
 }
 
 function drawHud(): void {
-  blueTile(L.gear.x, L.gear.y, L.gear.r * 1.12, 1, press.get('gear') ?? 0);
-  gearGlyph(L.gear.x, L.gear.y, L.gear.r * 0.62);
+  {
+    const { x, y, r } = L.gear;
+    ctx.fillStyle = 'rgba(20,50,110,0.28)';
+    ctx.beginPath(); ctx.arc(x + r * 0.04, y + r * 0.16, r * 1.08, 0, Math.PI * 2); ctx.fill();
+    const rim = ctx.createLinearGradient(0, y - r, 0, y + r);
+    rim.addColorStop(0, '#ffe18a'); rim.addColorStop(1, '#e09a2a');
+    ctx.fillStyle = rim;
+    ctx.beginPath(); ctx.arc(x, y, r * 1.08, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1755b6';
+    ctx.beginPath(); ctx.arc(x, y, r * 0.94, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createLinearGradient(0, y - r, 0, y + r);
+    g.addColorStop(0, '#5fb4ff'); g.addColorStop(1, '#168cf5');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y - r * 0.05, r * 0.84, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.ellipse(x - r * 0.1, y - r * 0.45, r * 0.45, r * 0.18, -0.2, 0, Math.PI * 2); ctx.fill();
+    gearGlyph(x, y - r * 0.04, r * 0.5);
+  }
   // level progress: [N] ====%==== [N+1]   [N+2], with the next toys in grey above
   const b = L.bar;
   const k = S.knitted / Math.max(1, totalTriples());
@@ -1531,9 +1546,7 @@ function drawHud(): void {
   const px = Math.round(L.colW * 0.15 * Math.min(2, window.devicePixelRatio || 1));
   {
     const sz = L.colW * 0.13, x0 = L.dots[1].x - sz * 0.75, x1 = L.dots[2].x + sz * 0.75, y1 = L.hudY - L.dots[1].r * 0.7, y0 = y1 - sz * 1.15;
-    ctx.fillStyle = 'rgba(255,255,255,0.32)';
-    roundRect(ctx, x0, y0, x1 - x0, y1 - y0, sz * 0.25);
-    ctx.fill();
+    void x0; void x1; void y0; void y1;
   }
   for (let i = 1; i <= 2; i++) {
     const t = scene.thumb(toyOf(level + i), px);
@@ -1623,6 +1636,7 @@ for (const [k, jpg, mask] of [['undo', undoJpg, undoA], ['scissors', scissorsJpg
     e.ok = true;
   }).c;
 }
+const B_NAME: Record<BoosterKey, string> = { undo: 'Undo', scissors: 'Scissors', slot: '+Slot' };
 const B_R = 0.498, B_CY = 0.462, B_BX = 0.327, B_BY = -0.338, B_BR = 0.152;   // measured on the cut-outs (× image width)
 
 function boosterArt(k: BoosterKey, x: number, y: number, r: number, count: number, lockedAt: number, press: number, pulse: number, armed: boolean): void {
@@ -1636,29 +1650,42 @@ function boosterArt(k: BoosterKey, x: number, y: number, r: number, count: numbe
   ctx.translate(x, y);
   ctx.fillStyle = 'rgba(15,15,60,0.22)';
   ctx.beginPath(); ctx.ellipse(w * 0.02, w * 0.06, w * 0.5, w * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.drawImage(img, -w / 2, -h * B_CY, w, h);
   const bx = w * B_BX, by = w * B_BY, br = w * B_BR;
   if (lockedAt) {
-    // dim the icon, white lock in the middle, level badge where the count was
-    ctx.fillStyle = 'rgba(92,86,140,0.55)';
-    ctx.beginPath(); ctx.arc(0, 0, w * 0.4, 0, Math.PI * 2); ctx.fill();
-    const q = w * 0.5;
+    // as in the reference: a muted lavender button, a big white padlock, "Lv.N" in a pill on its lower part
+    const R = w * 0.5;
+    ctx.fillStyle = '#7d78ad';
+    ctx.beginPath(); ctx.arc(0, R * 0.06, R, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createLinearGradient(0, -R, 0, R);
+    g.addColorStop(0, '#c9c7ea'); g.addColorStop(1, '#9d99c8');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.94, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.ellipse(-R * 0.1, -R * 0.55, R * 0.5, R * 0.18, -0.2, 0, Math.PI * 2); ctx.fill();
+    // padlock
+    const q = R * 0.62, ly = -R * 0.14;
+    ctx.strokeStyle = '#f4f2fb'; ctx.lineWidth = q * 0.17; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0, ly - q * 0.12, q * 0.3, Math.PI, 0); ctx.lineTo(q * 0.3, ly + q * 0.05); ctx.moveTo(-q * 0.3, ly - q * 0.12); ctx.lineTo(-q * 0.3, ly + q * 0.05); ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    roundRect(ctx, -q * 0.3, -q * 0.22, q * 0.6, q * 0.46, q * 0.1);
+    roundRect(ctx, -q * 0.5, ly, q, q * 0.78, q * 0.16);
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = q * 0.12;
-    ctx.beginPath(); ctx.arc(0, -q * 0.24, q * 0.2, Math.PI, 0); ctx.stroke();
-    ctx.fillStyle = '#8f89b6';
-    ctx.beginPath(); ctx.arc(0, -q * 0.02, q * 0.07, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#4e4a7e';
-    roundRect(ctx, bx - br * 1.45, by - br * 0.8, br * 2.9, br * 1.6, br * 0.8);
-    ctx.fill();
-    ctx.fillStyle = '#a7a2cc';
-    roundRect(ctx, bx - br * 1.32, by - br * 0.68, br * 2.64, br * 1.3, br * 0.65);
-    ctx.fill();
-    outlinedText(ctx, `Lv.${lockedAt}`, bx, by, br * 1.0, '#ffffff', '#4e4a7e');
-  } else {
+    ctx.fillStyle = '#9d99c8';
+    ctx.beginPath(); ctx.arc(0, ly + q * 0.33, q * 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(-q * 0.045, ly + q * 0.36, q * 0.09, q * 0.22);
+    // level pill, lower part of the button
+    const pw = R * 1.1, ph = R * 0.42, py = R * 0.48;
+    ctx.fillStyle = '#6d68a0';
+    roundRect(ctx, -pw / 2, py - ph / 2 + ph * 0.08, pw, ph, ph / 2); ctx.fill();
+    ctx.fillStyle = '#a9a6d4';
+    roundRect(ctx, -pw / 2, py - ph / 2, pw, ph, ph / 2); ctx.fill();
+    outlinedText(ctx, `Lv.${lockedAt}`, 0, py, ph * 0.72, '#ffffff', '#5a5590');
+    void img; void h;
+    ctx.restore();
+    outlinedText(ctx, B_NAME[k], x, y + R * 1.32, R * 0.42, '#ffffff', '#5a5590');
+    return;
+  }
+  ctx.drawImage(img, -w / 2, -h * B_CY, w, h);
+  {
     // repaint the badge: red with the count, or green "+" when empty
     const red = count > 0;
     ctx.fillStyle = red ? '#ffb3bd' : '#c4f7b0';
@@ -1759,19 +1786,7 @@ function gearGlyph(x: number, y: number, r: number): void {
 }
 
 function drawBoosters(): void {
-  // no toolbar: each button stands on its own soft rounded base, as in the reference
-  BOOSTERS.forEach((_, i) => {
-    const p = boosterAt(i), r = L.boostR;
-    ctx.fillStyle = 'rgba(40,80,150,0.22)';
-    roundRect(ctx, p.x - r * 1.25, p.y + r * 0.5, r * 2.5, r * 0.75, r * 0.37);
-    ctx.fill();
-    const g = ctx.createLinearGradient(0, p.y + r * 0.35, 0, p.y + r * 1.05);
-    g.addColorStop(0, '#d9efff');
-    g.addColorStop(1, '#a8cdef');
-    ctx.fillStyle = g;
-    roundRect(ctx, p.x - r * 1.22, p.y + r * 0.38, r * 2.44, r * 0.68, r * 0.34);
-    ctx.fill();
-  });
+  // no toolbar, no stands: the three buttons float on the sky, as in the reference
   BOOSTERS.forEach((k, i) => {
     const p = boosterAt(i);
     const pulse = !boosterLocked(k) && k === 'slot' && S.basket.length >= room(S) - 1 && S.cap < MAX_CAP && !ended ? Math.sin(clock * 8) : 0;
@@ -2061,28 +2076,28 @@ function drawBanner(): void {
 
 const bgCanvas = document.getElementById('bg') as HTMLCanvasElement | null;
 let bgKey = '';
-const bgImg = new Image();
-bgImg.onload = () => { bgKey = ''; };
-bgImg.src = bgPlayJpg;
 /**
  * The gameplay backdrop: the reference picture (a cosy knitting room with a blue crochet rug), drawn to
  * cover the screen — centred, cropped at the sides or bottom. Redrawn only when the size changes.
  */
 function drawBackground(): void {
+  // a clean pastel sky-blue, a little brighter in the middle — nothing else, so the board stands out
   if (!bgCanvas) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1), W = bgCanvas.clientWidth, H = bgCanvas.clientHeight;
-  const key = `${W}x${H}@${dpr}:${bgImg.complete && bgImg.naturalWidth > 0}`;
+  const key = `${W}x${H}@${dpr}`;
   if (key === bgKey || W < 1 || H < 1) return;
   bgKey = key;
   bgCanvas.width = Math.round(W * dpr); bgCanvas.height = Math.round(H * dpr);
   const g = bgCanvas.getContext('2d')!;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.fillStyle = '#7fb4ec';
+  const sky = g.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#99dcfd'); sky.addColorStop(0.5, '#9fdffd'); sky.addColorStop(1, '#94d9fa');
+  g.fillStyle = sky;
   g.fillRect(0, 0, W, H);
-  if (!bgImg.complete || !bgImg.naturalWidth) return;
-  const k = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight);
-  const w = bgImg.naturalWidth * k, h = bgImg.naturalHeight * k;
-  g.drawImage(bgImg, (W - w) / 2, Math.min(0, (H - h) * 0.35), w, h);
+  const glow = g.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.5);
+  glow.addColorStop(0, 'rgba(200,238,255,0.35)'); glow.addColorStop(1, 'rgba(200,238,255,0)');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, W, H);
 }
 
 function draw(): void {

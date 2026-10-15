@@ -72,8 +72,8 @@ function woodTexture(): THREE.CanvasTexture {
   c.width = 512; c.height = 512;
   const g = c.getContext('2d')!;
   const base = g.createLinearGradient(0, 0, 512, 512);
-  base.addColorStop(0, '#efbe82');
-  base.addColorStop(1, '#eab77b');
+  base.addColorStop(0, '#fdb862');
+  base.addColorStop(1, '#f9ae58');
   g.fillStyle = base;
   g.fillRect(0, 0, 512, 512);
   let seed = 7;
@@ -296,7 +296,7 @@ export class Scene3D {
     const ground = new THREE.Mesh(new THREE.CircleGeometry(2.2, 40), new THREE.ShadowMaterial({ opacity: 0.18 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
-    ground.visible = false;   // the pedestal takes the toy's shadow now
+    ground.visible = true;
     this.toyScene.add(ground);
     this.toyScene.add(this.pedestal);
   }
@@ -311,7 +311,7 @@ export class Scene3D {
     this.knits.clear();
     this.tints = this.toy.parts.map(() => new THREE.Color(RAW));
     const sz = new THREE.Box3().setFromObject(this.toy.group).getSize(new THREE.Vector3());
-    this.buildPedestal(Math.max(sz.x, sz.z) * 0.62);
+    void sz;   // (no display stand in this layout)
     this.fitToy(this.toyCam, this.toy.group);
   }
   private fitToy(cam: THREE.PerspectiveCamera, g: THREE.Object3D): void {
@@ -527,29 +527,17 @@ export class Scene3D {
     const top = Math.max(1, ...depth);
     // many layers: squeeze them so the pegs stay short, as in the reference
     const step = Math.min(0.085, 0.5 / top);
-    const pegH = Math.max(0.62, 0.22 + top * step + 0.16);   // short pegs, as in the reference
+    const pegH = Math.max(0.78, 0.22 + top * step + 0.22);   // short pegs, as in the reference
     this.pegH = pegH;
-    // as in the reference: a bright honey-maple panel with a soft light edge, sitting on a thin
-    // round-cornered frame of darker wood whose front edge shows, on a darker foot
+    // as in the reference: one thick rounded slab of toy wood — smooth honey top, brown-orange sides
     const tex = woodTexture();
-    const FR = 0.28;                                  // frame margin round the panel
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xd08250, roughness: 0.45 });
-    const frame = new THREE.Mesh(new RoundedBoxGeometry(W + FR * 2, 0.3, D + FR * 2, 5, 0.13), frameMat);
-    frame.position.y = -0.17;
-    frame.castShadow = true;
-    frame.receiveShadow = true;
-    const foot = new THREE.Mesh(new RoundedBoxGeometry(W + FR * 2 - 0.06, 0.14, D + FR * 2 - 0.06, 4, 0.06), new THREE.MeshStandardMaterial({ color: 0x7a3a1a, roughness: 0.6 }));
-    foot.position.y = -0.36;
-    const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.6 });
-    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfae3b3, roughness: 0.45 });
-    // the panel: a thin slab with a rounded light edge (side material) and the wood on top
-    const panel = new THREE.Mesh(new RoundedBoxGeometry(W, 0.1, D, 4, 0.045), [edgeMat, edgeMat, topMat, edgeMat, edgeMat, edgeMat]);
-    panel.position.y = -0.02;
-    panel.receiveShadow = true;
-    // the dark groove where the panel meets the frame
-    const groove = new THREE.Mesh(new RoundedBoxGeometry(W + 0.07, 0.08, D + 0.07, 3, 0.05), new THREE.MeshStandardMaterial({ color: 0x73310f, roughness: 0.8 }));
-    groove.position.y = -0.03;
-    this.board.add(foot, frame, groove, panel);
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.5 });
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0xbd743b, roughness: 0.55 });
+    const slab = new THREE.Mesh(new RoundedBoxGeometry(W + 0.24, 0.42, D + 0.24, 6, 0.16), [sideMat, sideMat, topMat, sideMat, sideMat, sideMat]);
+    slab.position.y = -0.21;
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+    this.board.add(slab);
     // cream pegs: a slim stem with a round knob, standing in a dark carved hole
     const pegMat = new THREE.MeshStandardMaterial({ color: 0xf3e4c8, roughness: 0.4 });
     const headMat = new THREE.MeshStandardMaterial({ color: 0xf8ecd6, roughness: 0.32 });
@@ -573,10 +561,10 @@ export class Scene3D {
       head.castShadow = true;
       const hole = new THREE.Mesh(holeG, holeMat);
       hole.rotation.x = -Math.PI / 2;
-      hole.position.set(at.x, 0.034, at.z);
+      hole.position.set(at.x, 0.004, at.z);
       const lip = new THREE.Mesh(lipG, lipMat);
       lip.rotation.x = -Math.PI / 2;
-      lip.position.set(at.x, 0.033, at.z);
+      lip.position.set(at.x, 0.003, at.z);
       this.board.add(peg, n, head, hole, lip);
     }
     strands.forEach((s, i) => {
@@ -685,10 +673,10 @@ export class Scene3D {
     }
     // what must be on screen: the board's rim and the tops of the far pegs
     this.fit = [];
-    const fo = 0.28 + 0.02;
-    this.frameOut = 0.28;
+    const fo = 0.12 + 0.02;
+    this.frameOut = 0.12;
     for (const x of [-W / 2 - fo, W / 2 + fo]) {
-      this.fit.push(new THREE.Vector3(x, 0, -D / 2 - fo), new THREE.Vector3(x, -0.43, D / 2 + fo));
+      this.fit.push(new THREE.Vector3(x, 0, -D / 2 - fo), new THREE.Vector3(x, -0.42, D / 2 + fo));
     }
     for (const p of [0, cols - 1]) this.fit.push(this.pegPos(p, pegH + 0.34));
     this.target.set(0, 0, 0);
